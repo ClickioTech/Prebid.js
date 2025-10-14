@@ -44,7 +44,7 @@ var adUnits = [
         {
             bidder: 'clickio',
             params: {
-                placementId: 'test-banner',
+                said: 'test',
             }
         }
     ]
