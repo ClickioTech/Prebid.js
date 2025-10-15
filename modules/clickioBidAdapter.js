@@ -16,10 +16,6 @@ const converter = ortbConverter({
        deepSetValue(imp, 'ext.params', bidRequest.params);
        return imp;
     }
-/*    request(buildRequest, imps, bidderRequest, context) {
-      let request = buildRequest(imps, bidderRequest, context);
-      return request;
-    },*/
 });
 
 registerBidder({
@@ -67,6 +63,14 @@ registerBidder({
       {
         type: 'iframe',
         url: `https://onetag-sys.com/usync/?pubId=7685cd60ce8d4f0&${queryParams.join('&')}`
+      },
+      {
+        type: 'iframe',
+        url: `https://ssbsync.smartadserver.com/api/sync?callerId=255&${queryParams.join('&')}`
+      },
+      {
+        type: 'iframe',
+        url: `https://eus.rubiconproject.com/usync.html?p=123&endpoint=eu${queryParams.join('&')}`
       }
       ];
     }
