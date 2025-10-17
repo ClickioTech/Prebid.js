@@ -57,12 +57,16 @@ export const spec = {
       }
     }
 
-    return [
-      {
-        type: 'iframe',
-        url: `https://o.clickiocdn.com/cookie_sync_html?${queryParams.join('&')}`
-      }
-    ];
+    if (syncOptions.iframeEnabled) {
+        return [
+          {
+            type: 'iframe',
+            url: `https://o.clickiocdn.com/cookie_sync_html?${queryParams.join('&')}`
+          }
+        ];
+    } else {
+        return[];
+    }
   }
 };
 
