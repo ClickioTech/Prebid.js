@@ -1,6 +1,6 @@
 import { registerBidder } from '../src/adapters/bidderFactory.js';
 import { BANNER } from '../src/mediaTypes.js';
-import { ortbConverter } from '../libraries/ortbConverter/converter.js'
+import { ortbConverter } from '../libraries/ortbConverter/converter.js';
 import {
   logMessage,
   isSafeFrameWindow,
@@ -59,7 +59,6 @@ export const spec = {
       url: ENDPOINT_URL,
       data: data,
       options: {
-        contentType: 'application/json',
         withCredentials: false
       },
       bidderRequest

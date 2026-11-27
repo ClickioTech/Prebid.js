@@ -13,13 +13,15 @@ import { Renderer } from '../src/Renderer.js';
  */
 
 const BIDDER_CODE = 'rtbsape';
+const ACP_ID = 2643; // Google Additional Consent provider ID
 const ENDPOINT = 'https://ssp-rtb.sape.ru/prebid';
 const RENDERER_SRC = 'https://cdn-rtb.sape.ru/js/player.js';
 const MATCH_SRC = 'https://www.acint.net/mc/?dp=141';
 
 export const spec = {
   code: BIDDER_CODE,
-  aliases: ['sape'],
+  acpId: ACP_ID,
+  aliases: [{ code: 'sape', acpId: ACP_ID }],
   supportedMediaTypes: [BANNER, VIDEO],
 
   /**
@@ -40,7 +42,7 @@ export const spec = {
    * @return ServerRequest Info describing the request to the server.
    */
   buildRequests: function (validBidRequests, bidderRequest) {
-    const tz = (new Date()).getTimezoneOffset()
+    const tz = (new Date()).getTimezoneOffset();
     const padInt = (v) => (v < 10 ? '0' + v : '' + v);
 
     return {
@@ -55,7 +57,7 @@ export const spec = {
         // TODO: please do not send internal data structures over the network
         refererInfo: bidderRequest.refererInfo.legacy
       },
-    }
+    };
   },
 
   /**
@@ -94,7 +96,7 @@ export const spec = {
           }
 
           bid.playerMuted = muted;
-          bid.renderer = renderer
+          bid.renderer = renderer;
 
           renderer.setRender(setOutstreamRenderer);
         }
@@ -129,7 +131,7 @@ export const spec = {
       triggerPixel(bid.nurl);
     }
   }
-}
+};
 
 /**
  * Initialize RtbSape outstream player

@@ -2,6 +2,7 @@ import adapterManager from '../src/adapterManager.js';
 import adapter from '../libraries/analyticsAdapter/AnalyticsAdapter.js';
 import { EVENTS } from '../src/constants.js';
 import { logInfo, logError } from '../src/utils.js';
+import { fetch } from '../src/ajax.js';
 
 let ENDPOINT = 'https://prebid-api.highr.ai/analytics';
 const auctions = {};
@@ -70,9 +71,9 @@ const datawrkzAnalyticsAdapter = Object.assign(adapter({ url: ENDPOINT, analytic
               match.cpm = args.cpm;
               match.currency = args.currency;
               match.timeToRespond = args.timeToRespond;
-              match.adId = args.adId
-              match.width = args.width
-              match.height = args.height
+              match.adId = args.adId;
+              match.width = args.width;
+              match.height = args.height;
             }
           }
           break;
@@ -124,9 +125,9 @@ const datawrkzAnalyticsAdapter = Object.assign(adapter({ url: ENDPOINT, analytic
             successDoc: JSON.stringify(doc),
             failureReason: null,
             failureMessage: null,
-          }
+          };
 
-          this.sendToEndPoint(payload)
+          this.sendToEndPoint(payload);
 
           break;
         }
@@ -148,9 +149,9 @@ const datawrkzAnalyticsAdapter = Object.assign(adapter({ url: ENDPOINT, analytic
             successDoc: null,
             failureReason: reason,
             failureMessage: message
-          }
+          };
 
-          this.sendToEndPoint(payload)
+          this.sendToEndPoint(payload);
 
           break;
         }
@@ -174,7 +175,7 @@ const datawrkzAnalyticsAdapter = Object.assign(adapter({ url: ENDPOINT, analytic
               adunits: adunitsArray
             };
 
-            this.sendToEndPoint(payload)
+            this.sendToEndPoint(payload);
 
             delete auctions[auctionId];
           }, 2000); // Wait 2 seconds for BID_WON to happen
@@ -192,8 +193,8 @@ const datawrkzAnalyticsAdapter = Object.assign(adapter({ url: ENDPOINT, analytic
         return;
       }
 
-      payload.publisherId = adapterConfig.publisherId
-      payload.apiKey = adapterConfig.apiKey
+      payload.publisherId = adapterConfig.publisherId;
+      payload.apiKey = adapterConfig.apiKey;
 
       try {
         fetch(ENDPOINT, {

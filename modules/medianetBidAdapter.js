@@ -8,7 +8,9 @@ import {
   logInfo,
   safeJSONEncode,
   deepClone,
-  deepSetValue, getWindowTop
+  deepSetValue,
+  getWindowTop,
+  getWinDimensions
 } from '../src/utils.js';
 import { registerBidder } from '../src/adapters/bidderFactory.js';
 import { config } from '../src/config.js';
@@ -19,11 +21,12 @@ import { getGptSlotInfoForAdUnitCode } from '../libraries/gptUtils/gptUtils.js';
 import { getViewportCoordinates } from '../libraries/viewport/viewport.js';
 import { filterBidsListByFilters, getTopWindowReferrer } from '../libraries/medianetUtils/utils.js';
 import { errorLogger } from '../libraries/medianetUtils/logger.js';
-import { GLOBAL_VENDOR_ID, MEDIANET } from '../libraries/medianetUtils/constants.js';
+import { GLOBAL_VENDOR_ID, MEDIANET, POST_ENDPOINT } from '../libraries/medianetUtils/constants.js';
 import { getGlobal } from '../src/prebidGlobal.js';
 import { getBoundingClientRect } from '../libraries/boundingClientRect/boundingClientRect.js';
 import { getMinSize } from '../libraries/sizeUtils/sizeUtils.js';
 import { getAdUnitElement } from '../src/utils/adUnits.js';
+import { coppaDataHandler } from '../src/consentHandler.js';
 
 /**
  * @typedef {import('../src/adapters/bidderFactory.js').BidRequest} BidRequest
@@ -35,6 +38,7 @@ const BIDDER_CODE = MEDIANET;
 const TRUSTEDSTACK_CODE = 'trustedstack';
 const BID_URL = 'https://prebid.media.net/rtb/prebid';
 const TRUSTEDSTACK_URL = 'https://prebid.trustedstack.com/rtb/trustedstack';
+const TRUSTEDSTACK_LOG_URL = 'https://navvy.trustedstack.com/log';
 const PLAYER_URL = 'https://prebid.media.net/video/bundle.js';
 const SLOT_VISIBILITY = {
   NOT_DETERMINED: 0,
@@ -117,21 +121,21 @@ function transformSizes(sizes) {
     return [getSize(sizes)];
   }
 
-  return sizes.map(size => getSize(size))
+  return sizes.map(size => getSize(size));
 }
 
 function getSize(size) {
   return {
     w: parseInt(size[0], 10),
     h: parseInt(size[1], 10)
-  }
+  };
 }
 
 function getWindowSize() {
   return {
     w: window.screen.width || -1,
     h: window.screen.height || -1
-  }
+  };
 }
 
 function getCoordinates(bidRequest) {
@@ -154,7 +158,7 @@ function getCoordinates(bidRequest) {
       y: rect.bottom,
       x: rect.right
     };
-    return coordinates
+    return coordinates;
   }
   return null;
 }
@@ -163,12 +167,11 @@ function extParams(bidRequest, bidderRequests) {
   const params = deepAccess(bidRequest, 'params');
   const gdpr = deepAccess(bidderRequests, 'gdprConsent');
   const uspConsent = deepAccess(bidderRequests, 'uspConsent');
-  const userId = deepAccess(bidRequest, 'userId');
   const sChain = deepAccess(bidRequest, 'ortb2.source.ext.schain') || {};
   const windowSize = spec.getWindowSize();
   const gdprApplies = !!(gdpr && gdpr.gdprApplies);
   const uspApplies = !!(uspConsent);
-  const coppaApplies = !!(config.getConfig('coppa'));
+  const coppaApplies = bidderRequests?.ortb2?.regs?.coppa === 1 || coppaDataHandler.getCoppa();
   const { top = -1, right = -1, bottom = -1, left = -1 } = getViewportCoordinates();
   return Object.assign({},
     { customer_id: params.cid },
@@ -179,7 +182,6 @@ function extParams(bidRequest, bidderRequests) {
     uspApplies && { usp_consent_string: uspConsent || '' },
     { coppa_applies: coppaApplies },
     windowSize.w !== -1 && windowSize.h !== -1 && { screen: windowSize },
-    userId && { user_id: userId },
     getGlobal().medianetGlobals.analyticsEnabled && { analytics: true },
     !isEmpty(sChain) && { schain: sChain },
     {
@@ -268,11 +270,11 @@ function getBidFloorByType(bidRequest) {
         if (mediaType === BANNER) {
           bidRequest.mediaTypes.banner.sizes.forEach(
             size => {
-              setFloorInfo(bidRequest, mediaType, size, floorInfo)
+              setFloorInfo(bidRequest, mediaType, size, floorInfo);
             }
-          )
+          );
         } else {
-          setFloorInfo(bidRequest, mediaType, '*', floorInfo)
+          setFloorInfo(bidRequest, mediaType, '*', floorInfo);
         }
       }
     });
@@ -311,7 +313,7 @@ function getOverlapArea(topLeft1, bottomRight1, topLeft2, bottomRight2) {
 }
 
 function normalizeCoordinates(coordinates) {
-  const { scrollX, scrollY } = window;
+  const { scrollX, scrollY } = getWinDimensions(window);
   return {
     top_left: {
       x: coordinates.top_left.x + scrollX,
@@ -321,7 +323,7 @@ function normalizeCoordinates(coordinates) {
       x: coordinates.bottom_right.x + scrollX,
       y: coordinates.bottom_right.y + scrollY,
     }
-  }
+  };
 }
 
 function getBidderURL(bidderCode, cid) {
@@ -333,7 +335,7 @@ function ortb2Data(ortb2, bidRequests) {
   const ortb2Object = deepClone(ortb2);
   const eids = deepAccess(bidRequests, '0.userIdAsEids');
   if (eids) {
-    deepSetValue(ortb2Object, 'user.ext.eids', eids)
+    deepSetValue(ortb2Object, 'user.ext.eids', eids);
   }
   return ortb2Object;
 }
@@ -347,7 +349,7 @@ function generatePayload(bidRequests, bidderRequests) {
     imp: bidRequests.map(request => slotParams(request, bidderRequests)),
     ortb2: ortb2Data(bidderRequests.ortb2, bidRequests),
     tmax: bidderRequests.timeout
-  }
+  };
 }
 
 function isValidBid(bid) {
@@ -391,10 +393,16 @@ function getLoggingData(bids) {
   return logData;
 }
 
+function getLoggingEndpoint(bidder) {
+  return bidder === TRUSTEDSTACK_CODE ? TRUSTEDSTACK_LOG_URL : POST_ENDPOINT;
+}
+
 function logEvent(event, data) {
   const logData = getLoggingData(data);
   event.cid = customerId;
-  errorLogger(event, logData, false).send();
+  const bidder = data?.[0]?.bidder;
+  const loggingEndpoint = getLoggingEndpoint(bidder);
+  errorLogger(event, logData, false, loggingEndpoint).send();
 }
 
 function clearPageMeta() {
@@ -427,7 +435,7 @@ function newVideoRenderer(bid) {
         autoPlay: bid.ap,
         preload: bid.pl,
         mute: bid.mt
-      }
+      };
       const adUnitCode = bid.dfp_id;
       const divId = getGptSlotInfoForAdUnitCode(adUnitCode).divId || adUnitCode;
       window.mnet.mediaNetoutstreamPlayer(bid, divId, obj);

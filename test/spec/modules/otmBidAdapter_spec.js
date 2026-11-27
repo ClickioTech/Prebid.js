@@ -42,7 +42,7 @@ describe('otmBidAdapter', function () {
       sizes: [[240, 400]]
     }];
 
-    const bidderRequest = { refererInfo: { page: `https://github.com:3000/`, domain: 'github.com:3000' } }
+    const bidderRequest = { refererInfo: { page: `https://github.com:3000/`, domain: 'github.com:3000' } };
 
     const request = spec.buildRequests(bidRequestData, bidderRequest);
     const req_data = request[0].data;
@@ -84,5 +84,12 @@ describe('otmBidAdapter', function () {
     expect(bid.netRevenue).to.equal(true);
     expect(bid.requestId).to.equal('101f211def7c99');
     expect(bid.ad).to.equal('<html><body>test html</body></html>');
+  });
+});
+
+describe('otmBidAdapter consent IDs', function () {
+  it('declares its Google Additional Consent provider ID', function () {
+    expect(spec.acpId).to.equal(3099);
+    expect(spec.gvlid).to.be.undefined;
   });
 });

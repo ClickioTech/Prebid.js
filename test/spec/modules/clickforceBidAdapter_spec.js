@@ -183,7 +183,7 @@ describe('ClickforceAdapter', function () {
     it('should register type is iframe', function () {
       const syncOptions = {
         'iframeEnabled': 'true'
-      }
+      };
       const userSync = spec.getUserSyncs(syncOptions);
       expect(userSync[0].type).to.equal('iframe');
       expect(userSync[0].url).to.equal('https://cdn.holmesmind.com/js/capmapping.htm');
@@ -192,10 +192,17 @@ describe('ClickforceAdapter', function () {
     it('should register type is image', function () {
       const syncOptions = {
         'pixelEnabled': 'true'
-      }
+      };
       const userSync = spec.getUserSyncs(syncOptions);
       expect(userSync[0].type).to.equal('image');
       expect(userSync[0].url).to.equal('https://c.holmesmind.com/cm');
     });
+  });
+});
+
+describe('clickforceBidAdapter consent IDs', function () {
+  it('declares its Google Additional Consent provider ID', function () {
+    expect(spec.acpId).to.equal(135);
+    expect(spec.gvlid).to.be.undefined;
   });
 });

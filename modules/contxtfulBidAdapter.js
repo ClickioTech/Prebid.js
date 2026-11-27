@@ -12,6 +12,7 @@ import { ortbConverter } from '../libraries/ortbConverter/converter.js';
 
 // Constants
 const BIDDER_CODE = 'contxtful';
+const ACP_ID = 2963; // Google Additional Consent provider ID
 const BIDDER_ENDPOINT = 'prebid.receptivity.io';
 const MONITORING_ENDPOINT = 'monitoring.receptivity.io';
 const DEFAULT_NET_REVENUE = true;
@@ -56,11 +57,11 @@ const _getRequestBidFloor = (mediaTypes, paramsBidFloor, bid) => {
     floor && (bidFloor.floor = floor);
     currency && (bidFloor.currency = currency);
   } else if (paramsBidFloor) {
-    bidFloor.floor = paramsBidFloor
+    bidFloor.floor = paramsBidFloor;
   }
 
   return bidFloor;
-}
+};
 
 // Get Parameters from the config.
 const extractParameters = (config) => {
@@ -75,7 +76,7 @@ const extractParameters = (config) => {
   }
 
   return { version, customer };
-}
+};
 
 // Construct the Payload towards the Bidding endpoint
 const buildRequests = (validBidRequests = [], bidderRequest = {}) => {
@@ -88,11 +89,11 @@ const buildRequests = (validBidRequests = [], bidderRequest = {}) => {
       params = {},
     } = bidRequest;
     bidRequest.bidFloor = _getRequestBidFloor(mediaTypes, params.bidfloor, bidRequest);
-    bidRequests.push(bidRequest)
+    bidRequests.push(bidRequest);
   });
   const config = pbjsConfig.getConfig();
   config.pbjsVersion = PREBID_VERSION;
-  const { version, customer } = extractParameters(config)
+  const { version, customer } = extractParameters(config);
   const adapterUrl = buildUrl({
     protocol: 'https',
     host: BIDDER_ENDPOINT,
@@ -134,9 +135,9 @@ const constructUrl = (userSyncsDefault, userSyncServer) => {
 };
 
 // Returns the list of user synchronization objects.
-const getUserSyncs = (syncOptions, serverResponses, gdprConsent, uspConsent, gppConsent) => {
+const getUserSyncs = (syncOptions, serverResponses, gdprConsent, uspConsent, gppConsent, coppa) => {
   // Get User Sync Defaults from pbjs lib
-  const userSyncsDefaultLib = getUserSyncsLib('')(syncOptions, null, gdprConsent, uspConsent, gppConsent);
+  const userSyncsDefaultLib = getUserSyncsLib('')(syncOptions, null, gdprConsent, uspConsent, gppConsent, coppa);
   const userSyncsDefault = userSyncsDefaultLib?.find(item => item.url !== undefined);
 
   // Map Server Responses to User Syncs list
@@ -258,6 +259,7 @@ const logEvent = (eventType, data) => {
 // Bidder public specification
 export const spec = {
   code: BIDDER_CODE,
+  acpId: ACP_ID,
   supportedMediaTypes: [BANNER, VIDEO, NATIVE],
 
   isBidRequestValid,

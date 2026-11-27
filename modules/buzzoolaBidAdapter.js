@@ -12,12 +12,14 @@ import { convertOrtbRequestToProprietaryNative } from '../src/native.js';
  */
 
 const BIDDER_CODE = 'buzzoola';
+const ACP_ID = 3112; // Google Additional Consent provider ID
 const ENDPOINT = 'https://exchange.buzzoola.com/ssp/prebidjs';
 const RENDERER_SRC = 'https://tube.buzzoola.com/new/build/buzzlibrary.js';
 
 export const spec = {
   code: BIDDER_CODE,
-  aliases: ['buzzoolaAdapter'],
+  acpId: ACP_ID,
+  aliases: [{ code: 'buzzoolaAdapter', acpId: ACP_ID }],
   supportedMediaTypes: [BANNER, VIDEO, NATIVE],
 
   /**
@@ -46,7 +48,7 @@ export const spec = {
       url: ENDPOINT,
       method: 'POST',
       data: bidderRequest,
-    }
+    };
   },
 
   /**
@@ -84,7 +86,7 @@ export const spec = {
         });
 
         renderer.setRender(setOutstreamRenderer);
-        validBid.renderer = renderer
+        validBid.renderer = renderer;
       }
 
       return validBid;

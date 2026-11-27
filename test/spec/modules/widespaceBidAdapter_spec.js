@@ -147,7 +147,7 @@ describe('+widespaceAdatperTest', function () {
     const UrlRegExp = /^((ftp|http|https):)?\/\/[^ "]+$/;
     before(function() {
       request = spec.buildRequests(bidRequest, bidderRequest);
-    })
+    });
 
     let fakeLocalStorage = {};
     let lsSetStub;
@@ -260,5 +260,12 @@ describe('+widespaceAdatperTest', function () {
       const userSync_test5 = spec.getUserSyncs({}, []);
       expect(Array.isArray(userSync_test5)).to.equal(true);
     });
+  });
+});
+
+describe('widespaceBidAdapter consent IDs', function () {
+  it('declares its Google Additional Consent provider ID', function () {
+    expect(spec.acpId).to.equal(2624);
+    expect(spec.gvlid).to.be.undefined;
   });
 });

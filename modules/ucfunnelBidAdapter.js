@@ -1,8 +1,7 @@
-import { generateUUID, _each, deepAccess } from '../src/utils.js';
+import { generateUUID, deepAccess } from '../src/utils.js';
 import { registerBidder } from '../src/adapters/bidderFactory.js';
 import { BANNER, VIDEO, NATIVE } from '../src/mediaTypes.js';
 import { getStorageManager } from '../src/storageManager.js';
-import { config } from '../src/config.js';
 import { convertOrtbRequestToProprietaryNative } from '../src/native.js';
 import { getDNT } from '../libraries/dnt/index.js';
 
@@ -15,15 +14,17 @@ import { getDNT } from '../libraries/dnt/index.js';
 const COOKIE_NAME = 'ucf_uid';
 const VER = 'ADGENT_PREBID-2018011501';
 const BIDDER_CODE = 'ucfunnel';
+const ACP_ID = 1626; // Google Additional Consent provider ID
 const CURRENCY = 'USD';
 const VIDEO_CONTEXT = {
   INSTREAM: 0,
   OUSTREAM: 2
-}
+};
 const storage = getStorageManager({ bidderCode: BIDDER_CODE });
 
 export const spec = {
   code: BIDDER_CODE,
+  acpId: ACP_ID,
   ENDPOINT: 'https://hb.aralego.com/header',
   supportedMediaTypes: [BANNER, VIDEO, NATIVE],
   /**
@@ -61,7 +62,7 @@ export const spec = {
         url: spec.ENDPOINT,
         data: getRequestData(bid, bidderRequest),
         bidRequest: bid
-      }
+      };
     });
   },
 
@@ -180,7 +181,7 @@ function getCookieSyncParameter(gdprApplies, apiVersion, consentString, uspConse
 function parseSizes(bid) {
   const params = bid.params;
   if (bid.mediaType === VIDEO) {
-    let size = [];
+    let size;
     if (params.video && params.video.playerWidth && params.video.playerHeight) {
       size = [
         params.video.playerWidth,
@@ -220,7 +221,7 @@ function getMediaType(mediaTypes) {
   } else if (mediaTypes != null && mediaTypes.video) {
     return 'video';
   } else if (mediaTypes != null && mediaTypes.native) {
-    return 'native'
+    return 'native';
   }
   return 'banner';
 }
@@ -249,7 +250,7 @@ function addBidData(bidData, key, value) {
 }
 
 function getFormat(size) {
-  const formatList = []
+  const formatList = [];
   for (var i = 0; i < size.length; i++) {
     formatList.push(size[i].join(','));
   }
@@ -260,7 +261,6 @@ function getRequestData(bid, bidderRequest) {
   const size = parseSizes(bid);
   const language = navigator.language;
   const dnt = getDNT() ? 1 : 0;
-  const userIdTdid = (bid.userId && bid.userId.tdid) ? bid.userId.tdid : '';
   const schain = bid?.ortb2?.source?.ext?.schain;
   const supplyChain = getSupplyChain(schain);
   const bidFloor = getFloor(bid, size, bid.mediaTypes);
@@ -273,13 +273,13 @@ function getRequestData(bid, bidderRequest) {
     je: 1,
     dnt: dnt,
     adid: bid.params.adid,
-    tdid: userIdTdid,
+    tdid: '', // Prebid 10+ does not set bid.userId
     schain: supplyChain
   };
 
   addBidData(bidData, 'fp', bidFloor);
   addBidData(bidData, 'gpid', gpid);
-  addUserId(bidData, bid.userId);
+  bidData.eids = '';
 
   bidData.u = bidderRequest.refererInfo.page || bidderRequest.refererInfo.topmostLocation;
   bidData.host = bidderRequest.refererInfo.domain;
@@ -289,7 +289,7 @@ function getRequestData(bid, bidderRequest) {
   }
 
   if (storage.cookiesAreEnabled()) {
-    let ucfUid = '';
+    let ucfUid;
     if (storage.getCookie(COOKIE_NAME) !== null) {
       ucfUid = storage.getCookie(COOKIE_NAME);
       bidData.ucfUid = ucfUid;
@@ -331,57 +331,9 @@ function getRequestData(bid, bidderRequest) {
     });
   }
 
-  if (config.getConfig('coppa')) {
+  if (bidderRequest?.ortb2?.regs?.coppa) {
     bidData.coppa = true;
   }
-
-  return bidData;
-}
-
-function addUserId(bidData, userId) {
-  bidData['eids'] = '';
-  _each(userId, (userIdObjectOrValue, userIdProviderKey) => {
-    switch (userIdProviderKey) {
-      case 'hadronId':
-        if (userIdObjectOrValue.hadronId) {
-          bidData[userIdProviderKey + 'hadronId'] = userIdObjectOrValue.hadronId;
-        }
-        if (userIdObjectOrValue.auSeg) {
-          bidData[userIdProviderKey + '_auSeg'] = userIdObjectOrValue.auSeg;
-        }
-        break;
-      case 'parrableId':
-        if (userIdObjectOrValue.eid) {
-          bidData[userIdProviderKey + '_eid'] = userIdObjectOrValue.eid;
-        }
-        break;
-      case 'id5id':
-        if (userIdObjectOrValue.uid) {
-          bidData[userIdProviderKey + '_uid'] = userIdObjectOrValue.uid;
-        }
-        if (userIdObjectOrValue.ext && userIdObjectOrValue.ext.linkType) {
-          bidData[userIdProviderKey + '_linkType'] = userIdObjectOrValue.ext.linkType;
-        }
-        break;
-      case 'uid2':
-        if (userIdObjectOrValue.id) {
-          bidData['eids'] = (bidData['eids'].length > 0)
-            ? (bidData['eids'] + '!' + userIdProviderKey + ',' + userIdObjectOrValue.id)
-            : (userIdProviderKey + ',' + userIdObjectOrValue.id);
-        }
-        break;
-      case 'connectid':
-        if (userIdObjectOrValue) {
-          bidData['eids'] = (bidData['eids'].length > 0)
-            ? (bidData['eids'] + '!verizonMediaId,' + userIdObjectOrValue)
-            : ('verizonMediaId,' + userIdObjectOrValue);
-        }
-        break;
-      default:
-        bidData[userIdProviderKey] = userIdObjectOrValue;
-        break;
-    }
-  });
 
   return bidData;
 }

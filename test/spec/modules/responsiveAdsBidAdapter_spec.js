@@ -30,7 +30,7 @@ describe('responsiveAdsBidAdapter', function() {
 
     bidderRequest = {
       timeout: 3000,
-    }
+    };
   });
 
   afterEach(function () {
@@ -82,6 +82,13 @@ describe('responsiveAdsBidAdapter', function() {
       expect(request.method).to.exist;
       expect(request.method).to.equal('POST');
       expect(request.url).to.exist;
+    });
+
+    it('Should not set a contentType, so no CORS preflight is triggered', function() {
+      const request = spec.buildRequests(bidRequests, bidderRequest);
+
+      expect(request.options?.contentType).to.be.undefined;
+      expect(request.options.withCredentials).to.equal(false);
     });
 
     it('Should add adapter version', function() {

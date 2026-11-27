@@ -308,7 +308,7 @@ describe('buzzoolaBidAdapter', () => {
       result.forEach(bid => {
         fields.forEach(field => {
           expect(bid).to.have.own.property(field);
-        })
+        });
       });
     }
 
@@ -409,5 +409,16 @@ describe('buzzoolaBidAdapter', () => {
       expect(spyCall.args[0]).to.be.instanceof(Element);
       expect(spyCall.args[1]).to.deep.equal(RENDERER_DATA);
     });
+  });
+});
+
+describe('buzzoolaBidAdapter consent IDs', function () {
+  it('declares its Google Additional Consent provider ID', function () {
+    expect(spec.acpId).to.equal(3112);
+    expect(spec.gvlid).to.be.undefined;
+  });
+
+  it('declares the same Additional Consent provider ID on its aliases', function () {
+    expect(spec.aliases.find(alias => alias.code === 'buzzoolaAdapter')).to.have.property('acpId', 3112);
   });
 });

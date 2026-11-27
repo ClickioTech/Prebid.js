@@ -1,5 +1,6 @@
 import { targetingLock } from '../../../../src/targeting/lock.js';
 import { config } from 'src/config.js';
+import { mockGptSlot } from '../../../mocks/gpt.js';
 
 describe('Targeting lock', () => {
   let lock, clock, targeting, sandbox;
@@ -91,24 +92,28 @@ describe('Targeting lock', () => {
             eventHandlers[event] = listener;
           },
           removeEventListener: sinon.stub()
-        }
-      })
+        };
+      });
 
       it('should unlock on slotRenderEnded', () => {
         lock.lock(targeting);
         eventHandlers.slotRenderEnded({
-          slot: {
-            getTargeting: (key) => [targeting[key]]
-          }
+          slot: mockGptSlot(targeting)
         });
+        expect(lock.isLocked(targeting)).to.be.false;
+      });
+
+      it('can unlock a given slot', () => {
+        lock.lock(targeting);
+        lock.unlock(mockGptSlot(targeting));
         expect(lock.isLocked(targeting)).to.be.false;
       });
 
       it('should unregister when disabled', () => {
         lock.lock(targeting);
         config.resetConfig();
-        sinon.assert.calledWith(pubads.removeEventListener, 'slotRenderEnded')
-      })
+        sinon.assert.calledWith(pubads.removeEventListener, 'slotRenderEnded');
+      });
     });
   });
 });

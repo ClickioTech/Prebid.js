@@ -1,8 +1,9 @@
+import { getElementStyle } from '../libraries/elementStyle/elementStyle.js';
 import { getCurrencyFromBidderRequest } from '../libraries/ortb2Utils/currency.js';
 import { registerBidder } from '../src/adapters/bidderFactory.js';
 import { BANNER, NATIVE, VIDEO } from '../src/mediaTypes.js';
 import { convertOrtbRequestToProprietaryNative } from '../src/native.js';
-import { inIframe, _each, _map, deepAccess, deepSetValue, formatQS, triggerPixel, logInfo } from '../src/utils.js';
+import { inIframe, _each, _map, deepAccess, deepSetValue, formatQS, triggerPixel, logInfo, getWinDimensions } from '../src/utils.js';
 import { getBoundingClientRect } from '../libraries/boundingClientRect/boundingClientRect.js';
 import { ajax } from '../src/ajax.js';
 import { config as pbjsConfig } from '../src/config.js';
@@ -110,9 +111,9 @@ export const NATIVE_ASSETS = {
   cta: [8, DATA_ASSET_TYPES.CTA_TEXT],
   rating: [9, DATA_ASSET_TYPES.RATING],
   likes: [10, DATA_ASSET_TYPES.LIKES],
-}
+};
 const NATIVE_ASSETS_IDS = {};
-_each(NATIVE_ASSETS, (asset, key) => { NATIVE_ASSETS_IDS[asset[0]] = key });
+_each(NATIVE_ASSETS, (asset, key) => { NATIVE_ASSETS_IDS[asset[0]] = key; });
 
 /** @type {BidderSpec} */
 export const spec = {
@@ -241,8 +242,8 @@ export const spec = {
       deepSetValue(data, 'ext.isiframe', isIframe);
 
       if (windowContext) {
-        deepSetValue(data, 'device.ext.scroll.top', windowContext.scrollY);
-        deepSetValue(data, 'device.ext.scroll.left', windowContext.scrollX);
+        deepSetValue(data, 'device.ext.scroll.top', getWinDimensions(windowContext).scrollY);
+        deepSetValue(data, 'device.ext.scroll.left', getWinDimensions(windowContext).scrollX);
       }
 
       const queryParamsString = formatQS(queryParams);
@@ -299,7 +300,7 @@ export const spec = {
   onAdRenderSucceeded: function (bid) {
     eventLog('PREBID_AD_RENDER_SUCCEEDED_EVENT', bid);
   },
-}
+};
 
 /**
  * @param {YandexBidRequestParams} bidRequestParams
@@ -351,7 +352,7 @@ function getBidfloor(bidRequest) {
           currency: DEFAULT_CURRENCY,
           mediaType: type,
           size: bidRequest.sizes || '*'
-        })
+        });
         floors.push(floorInfo);
       }
     });
@@ -376,7 +377,7 @@ function mapBanner(bidRequest) {
       format,
       w,
       h,
-    }
+    };
   }
 }
 
@@ -705,7 +706,7 @@ function isVisible(elem) {
 
     try {
       // Get computed styles for the current element
-      const computedStyle = context.getComputedStyle(currentElement);
+      const computedStyle = getElementStyle(currentElement, context);
 
       // Check for hiding styles: display: none or visibility: hidden
       const isHidden = computedStyle.display === 'none' ||

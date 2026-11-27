@@ -101,8 +101,8 @@ describe('Reconciliation Real time data submodule', function () {
         return {
           top: topWin,
           parent: parentWin
-        }
-      }
+        };
+      };
 
       it('should return null if called with null', function() {
         expect(getTopIFrameWin(null)).to.be.null;
@@ -114,6 +114,7 @@ describe('Reconciliation Real time data submodule', function () {
         const iframe2Win = mockFrameWin(topWin, iframe1Win);
 
         expect(getTopIFrameWin(iframe1Win, topWin)).to.be.null;
+        expect(getTopIFrameWin(iframe2Win, topWin)).to.be.null;
       });
 
       it('should get the topmost iframe', function () {
@@ -146,8 +147,7 @@ describe('Reconciliation Real time data submodule', function () {
         adSlotElement.id = 'reconciliationAd';
         document.body.appendChild(adSlotElement);
         document.body.appendChild(adSlotIframe); // iframe is not in ad slot
-
-        const adSlot = makeSlot({ code: '/reconciliationAdunit', divId: adSlotElement.id });
+        makeSlot({ code: '/reconciliationAdunit', divId: adSlotElement.id });
 
         expect(getSlotByWin(adSlotIframe.contentWindow)).to.be.null;
       });
@@ -163,17 +163,7 @@ describe('Reconciliation Real time data submodule', function () {
         document.body.appendChild(adSlotElement);
 
         const adSlot = makeSlot({ code: '/reconciliationAdunit', divId: adSlotElement.id });
-        // Fix targeting methods
-        adSlot.targeting = {};
-        adSlot.setTargeting = function(key, value) {
-          this.targeting[key] = [value];
-        };
-        adSlot.getTargeting = function(key) {
-          return this.targeting[key];
-        };
-
-        adSlot.setTargeting('RSDK_AUID', '/reconciliationAdunit');
-        adSlot.setTargeting('RSDK_ADID', '12345');
+        adSlot.setConfig({ targeting: { RSDK_AUID: '/reconciliationAdunit', RSDK_ADID: '12345' } });
         adSlotIframe.contentDocument.open();
         adSlotIframe.contentDocument.write(`<script>
           window.parent.postMessage(JSON.stringify({
@@ -209,7 +199,7 @@ describe('Reconciliation Real time data submodule', function () {
           expect(trackPostStub.getCalls()[0].args[0]).to.eql('https://confirm.fiduciadlt.com/pimp');
           expect(trackPostStub.getCalls()[0].args[1].adUnitId).to.eql('/reconciliationAdunit');
           expect(trackPostStub.getCalls()[0].args[1].adDeliveryId).to.eql('12345');
-          expect(trackPostStub.getCalls()[0].args[1].tagOwnerMemberId).to.eql('test_member_id'); ;
+          expect(trackPostStub.getCalls()[0].args[1].tagOwnerMemberId).to.eql('test_member_id');
           expect(trackPostStub.getCalls()[0].args[1].dataSources.length).to.eql(1);
           expect(trackPostStub.getCalls()[0].args[1].dataRecipients.length).to.eql(2);
           expect(trackPostStub.getCalls()[0].args[1].publisherMemberId).to.eql('test_prebid_publisher');

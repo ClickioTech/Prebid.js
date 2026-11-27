@@ -1,11 +1,8 @@
 // jshint esversion: 6, es3: false, node: true
-import { assert, expect } from 'chai';
+import { assert } from 'chai';
 import { spec } from 'modules/finativeBidAdapter.js';
-import { NATIVE } from 'src/mediaTypes.js';
-import { config } from 'src/config.js';
 
 describe('Finative adapter', function () {
-  let serverResponse, bidRequest, bidResponses;
   const bid = {
     'bidder': 'finative',
     'params': {
@@ -49,14 +46,28 @@ describe('Finative adapter', function () {
       assert.deepEqual(keys, data);
     });
 
-    it('Verify the device', function () {
+    it('Verify the device ua is undefined when ortb2.device.ua is not set', function () {
       const validBidRequests = [{
         bidId: 'bidId',
         params: {}
       }];
       const request = JSON.parse(spec.buildRequests(validBidRequests, { refererInfo: { referer: 'page' } }).data);
 
-      assert.equal(request.device.ua, navigator.userAgent);
+      assert.isUndefined(request.device.ua);
+    });
+
+    it('Verify the device uses ortb2.device.ua when available', function () {
+      const validBidRequests = [{
+        bidId: 'bidId',
+        params: {}
+      }];
+      const bidderRequest = {
+        refererInfo: { referer: 'page' },
+        ortb2: { device: { ua: 'ortb2-user-agent' } }
+      };
+      const request = JSON.parse(spec.buildRequests(validBidRequests, bidderRequest).data);
+
+      assert.equal(request.device.ua, 'ortb2-user-agent');
     });
 
     it('Verify native asset ids', function () {
@@ -142,10 +153,10 @@ describe('Finative adapter', function () {
       const result = spec.interpretResponse(badResponse, bidRequest);
       assert.equal(result.length, 0);
 
-      delete badResponse.body
+      delete badResponse.body;
 
-      const result1 = spec.interpretResponse(badResponse, bidRequest);
-      assert.equal(result.length, 0);
+      const resultWithoutBody = spec.interpretResponse(badResponse, bidRequest);
+      assert.equal(resultWithoutBody.length, 0);
     });
 
     it('should return the correct params', function () {

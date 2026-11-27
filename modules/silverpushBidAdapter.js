@@ -8,6 +8,7 @@ import { ajax } from '../src/ajax.js';
 import { getCurrencyFromBidderRequest } from '../libraries/ortb2Utils/currency.js';
 
 const BIDDER_CODE = 'silverpush';
+const ACP_ID = 1661; // Google Additional Consent provider ID
 const bidderConfig = 'sp_pb_ortb';
 const bidderVersion = '1.0.0';
 const DEFAULT_CURRENCY = 'USD';
@@ -36,6 +37,7 @@ export const VIDEO_ORTB_REQUIRED = ['api', 'mimes', 'placement', 'protocols', 'm
 
 export const spec = {
   code: BIDDER_CODE,
+  acpId: ACP_ID,
   supportedMediaTypes: [BANNER, VIDEO],
   isBidRequestValid,
   buildRequests,
@@ -82,7 +84,7 @@ export const CONVERTER = ortbConverter({
       ext: {
         bc: `${bidderConfig}_${bidderVersion}`
       }
-    })
+    });
 
     const userAgent = navigator.userAgent;
     utils.deepSetValue(req, 'device.os', spec.getOS(userAgent));
@@ -111,13 +113,13 @@ export const CONVERTER = ortbConverter({
     }
 
     bidResponse = buildVideoVastResponse(bidResponse);
-    bidResponse = buildVideoOutstreamResponse(bidResponse, context)
+    bidResponse = buildVideoOutstreamResponse(bidResponse, context);
 
     return bidResponse;
   },
   response(buildResponse, bidResponses, ortbResponse, context) {
     const response = buildResponse(bidResponses, ortbResponse, context);
-    return response.bids
+    return response.bids;
   }
 });
 
@@ -203,7 +205,7 @@ function createRequest(bidRequests, bidderRequest, mediaType) {
     url: REQUEST_URL,
     data: CONVERTER.toORTB({ bidRequests, bidderRequest, context: { mediaType } }),
     bidderRequest
-  }
+  };
 }
 
 function buildVideoVastResponse(bidResponse) {
@@ -211,7 +213,7 @@ function buildVideoVastResponse(bidResponse) {
     bidResponse.vastUrl = bidResponse.vastXml;
   }
 
-  return { ...bidResponse }
+  return { ...bidResponse };
 }
 
 function buildVideoOutstreamResponse(bidResponse, context) {
@@ -225,9 +227,7 @@ function buildVideoOutstreamResponse(bidResponse, context) {
       url: bidResponse.rendererUrl
     });
 
-    bidResponse.renderer.setRender(_renderer(bidResponse));
-
-    bidResponse.renderer.render(bidResponse);
+    bidResponse.renderer.setRender(() => _renderer(bidResponse));
   }
 
   return { ...bidResponse };

@@ -2,12 +2,13 @@ import { ACTIVITY_ACCESS_REQUEST_CREDENTIALS } from './activities/activities.js'
 import { activityParams } from './activities/activityParams.js';
 import { isActivityAllowed } from './activities/rules.js';
 import { config } from './config.js';
-import { buildUrl, logError, parseUrl } from './utils.js';
+import { buildUrl, logError, logWarn, parseUrl } from './utils.js';
 import type { ModuleType } from "./activities/modules.ts";
 
 export const dep = {
+  // eslint-disable-next-line no-restricted-properties
   fetch: window.fetch.bind(window),
-  makeRequest: (r, o) => new Request(r, o),
+  makeRequest: (r, o?) => new Request(r, o),
   timeout(timeout, resource) {
     const ctl = new AbortController();
     let cancelTimer = setTimeout(() => {
@@ -18,15 +19,16 @@ export const dep = {
     return {
       signal: ctl.signal,
       done() {
-        cancelTimer && clearTimeout(cancelTimer)
+        cancelTimer && clearTimeout(cancelTimer);
       }
-    }
+    };
   }
-}
+};
 
 const GET = 'GET';
 const POST = 'POST';
 const CTYPE = 'Content-Type';
+const KEEPALIVE_MAX_BODY_SIZE = 64 * 1024;
 export interface AjaxOptions {
   /**
    * HTTP method.
@@ -49,14 +51,6 @@ export interface AjaxOptions {
    * Fetch keepalive flag.
    */
   keepalive?: boolean
-  /**
-   * Whether chrome's `Sec-Browing-Topics` header should be sent
-   */
-  browsingTopics?: boolean
-  /**
-   * If true, suppress warnings
-   */
-  suppressTopicsEnrollmentWarning?: boolean;
 }
 
 /**
@@ -75,29 +69,37 @@ export function toFetchRequest(url, data, options: AjaxOptions = {}) {
   const rqOpts: any = {
     method,
     headers
-  }
+  };
   if (method !== GET && data) {
     rqOpts.body = data;
   }
   if (options.withCredentials) {
     rqOpts.credentials = 'include';
   }
-  if (isSecureContext) {
-    ['browsingTopics'].forEach(opt => {
-      // the Request constructor will throw an exception if the browser supports topics
-      // but we're not in a secure context
-      if (options[opt]) {
-        rqOpts[opt] = true;
-      }
-    })
-    if (options.suppressTopicsEnrollmentWarning != null) {
-      rqOpts.suppressTopicsEnrollmentWarning = options.suppressTopicsEnrollmentWarning;
-    }
-  }
+  const request = dep.makeRequest(url, rqOpts);
   if (options.keepalive) {
-    rqOpts.keepalive = true;
+    // do not set the "real" keepalive flag as Safari won't allow us to change it
+    (request as any)._keepalive = true;
+    // record the body size now, so that the fetcher doesn't need to read it back asynchronously
+    (request as any)._bodySize = bodySize(rqOpts.body);
   }
-  return dep.makeRequest(url, rqOpts);
+  return request;
+}
+
+/**
+ * Size in bytes of a request body, if it can be known synchronously.
+ */
+function bodySize(body): number | undefined {
+  if (body == null) return 0;
+  if (typeof body === 'string') return new Blob([body]).size;
+  return undefined;
+}
+
+function knownBodySize(resource, options): number | undefined {
+  if (options?.body != null) return bodySize(options.body);
+  if (resource?._bodySize != null) return resource._bodySize;
+  if (typeof resource === 'string' || resource instanceof URL) return 0;
+  return undefined;
 }
 
 function callerContext(callers = []) {
@@ -111,19 +113,19 @@ function callerContext(callers = []) {
         } finally {
           stack.pop();
         }
-      }
+      };
     },
     getCallers() {
       return stack[stack.length - 1];
     }
-  }
+  };
 }
 
 function fixedCallerContext(moduleType, moduleName) {
   return {
     attach: (fn) => fn,
     getCallers: () => [[moduleType, moduleName]]
-  }
+  };
 }
 
 /**
@@ -139,46 +141,96 @@ export function fetcherFactory(timeout = 3000, { request, done }: any = {}, modu
   // this is not intended to be used directly; see plugins/callerContext.js
   return (...args) => {
     return fetcherFactoryImpl(callerContext(callers), ...args);
-  }
-}
+  };
+};
 
-function fetcherFactoryImpl(context, timeout = 3000, { request, done }: any = {}, moduleType?: string, moduleName?: string): typeof window.fetch {
+function throwingFetcher(context, timeout = 3000, { request, done }: any = {}, moduleType?: string, moduleName?: string) {
   if (moduleName && moduleType) {
     context = fixedCallerContext(moduleType, moduleName);
   }
-  let fetcher = (resource, options) => {
+  let start = (resource, options?) => {
+    // special treatment for keepalive - because of inconsistent browser behavior,
+    // we must start with keepalive: false and flip it as a last step
+    // Updating request options with new Request(oldRequest, newOptions):
+    //  on Firefox, will default newOptions.keepalive = false
+    //  on Safari, will not allow keepalive = true to become = false
+    const keepalive = resource?._keepalive ?? options?.keepalive ?? resource?.keepalive;
     let to;
-    if (timeout != null && options?.signal == null && !config.getConfig('disableAjaxTimeout')) {
-      to = dep.timeout(timeout, resource);
-      options = Object.assign({ signal: to.signal }, options);
-    }
-    let request = dep.makeRequest(resource, options);
-
-    if (
-      request.credentials === 'include' && (
-        context.getCallers().length === 0 ||
-        context.getCallers().some(([moduleType, moduleName]) => !isActivityAllowed(ACTIVITY_ACCESS_REQUEST_CREDENTIALS, activityParams(moduleType, moduleName)))
-      )
-    ) {
-      request = dep.makeRequest(request, {
-        keepalive: request.keepalive, // According to MDN this should be unnecessary, but Firefox will lose `keepalive` without itt
-        credentials: 'same-origin'
+    try {
+      if (timeout != null && options?.signal == null && !config.getConfig('disableAjaxTimeout')) {
+        to = dep.timeout(timeout, resource);
+        options = Object.assign({ signal: to.signal }, options);
+      }
+      let request = dep.makeRequest(resource, {
+        ...options,
+        keepalive: false
       });
+
+      if (
+        request.credentials === 'include' && (
+          context.getCallers().length === 0 ||
+          context.getCallers().some(([moduleType, moduleName]) => !isActivityAllowed(ACTIVITY_ACCESS_REQUEST_CREDENTIALS, activityParams(moduleType, moduleName)))
+        )
+      ) {
+        request = dep.makeRequest(request, {
+          credentials: 'same-origin'
+        });
+      }
+      let pm;
+      if (keepalive) {
+        const send = (size: number) => {
+          if (size > KEEPALIVE_MAX_BODY_SIZE) {
+            logWarn(`Ignoring keepalive: request body exceeds ${KEEPALIVE_MAX_BODY_SIZE} bytes`, request);
+          } else {
+            request = dep.makeRequest(request, {
+              keepalive: true
+            });
+          }
+          return dep.fetch(request);
+        };
+        const size = knownBodySize(resource, options);
+        if (size != null) {
+          // start the request synchronously: keepalive requests are often sent as the page is being unloaded
+          // (e.g. on pagehide), and some browsers (Firefox) drop requests started after the handler returns
+          pm = new Promise(resolve => resolve(send(size)));
+        } else {
+          // requests can be "used" only once - and blob() counts as usage, so clone the request
+          pm = request.clone().blob().then(blob => send(blob.size));
+        }
+      } else {
+        pm = dep.fetch(request);
+      }
+      if (to?.done != null) pm = pm.finally(to.done);
+      return pm;
+    } catch (e) {
+      to?.done?.();
+      throw e;
     }
-    let pm = dep.fetch(request);
-    if (to?.done != null) pm = pm.finally(to.done);
-    return pm;
   };
 
   if (request != null || done != null) {
-    fetcher = ((fetch) => function (resource, options) {
+    start = ((fetch) => function (resource, options) {
       const origin = new URL(resource?.url == null ? resource : resource.url, document.location as unknown as string).origin;
       let req = fetch(resource, options);
       request && request(origin);
       if (done) req = req.finally(() => done(origin));
       return req;
-    })(fetcher);
+    })(start);
   }
+  return { start, context };
+}
+
+function fetcherFactoryImpl(context, timeout = 3000, { request, done }: any = {}, moduleType?: string, moduleName?: string): typeof window.fetch {
+  let start;
+  ({ start, context } = throwingFetcher(context, timeout, { request, done }, moduleType, moduleName));
+  // native fetch never throws synchronously
+  const fetcher = (resource, options) => {
+    try {
+      return start(resource, options);
+    } catch (e) {
+      return Promise.reject(e);
+    }
+  };
   (fetcher as any).withCallers = (callers) => context.attach(fetcher, callers);
   return fetcher;
 }
@@ -195,10 +247,10 @@ function toXHR({ status, statusText = '', headers, url }: {
   function getXML(onError?) {
     if (xml === undefined) {
       try {
-        xml = new DOMParser().parseFromString(responseText, headers?.get(CTYPE)?.split(';')?.[0] as any)
+        xml = new DOMParser().parseFromString(responseText, headers?.get(CTYPE)?.split(';')?.[0] as any);
       } catch (e) {
         xml = null;
-        onError && onError(e)
+        onError && onError(e);
       }
     }
     return xml;
@@ -217,10 +269,10 @@ function toXHR({ status, statusText = '', headers, url }: {
     },
     getResponseHeader: (header) => headers?.has(header) ? headers.get(header) : null,
     toJSON() {
-      return Object.assign({ responseXML: getXML() }, this)
+      return Object.assign({ responseXML: getXML() }, this);
     },
     timedOut: false
-  }
+  };
 }
 
 /**
@@ -254,13 +306,13 @@ export function ajaxBuilder(timeout = 3000, { request, done } = {} as any, modul
   // this is not intended to be used directly; see plugins/callerContext.js
   return (...args) => {
     return ajaxBuilderImpl(callerContext(callers), ...args);
-  }
-}
+  };
+};
 
 function ajaxBuilderImpl(context, timeout = 3000, { request, done } = {} as any, moduleType?: string, moduleName?: string) {
-  const fetcher = fetcherFactoryImpl(context, timeout, { request, done }, moduleType, moduleName);
+  const { start } = throwingFetcher(context, timeout, { request, done }, moduleType, moduleName);
   function ajax(url: string, callback?: AjaxCallback, data?: unknown, options: AjaxOptions = {}) {
-    attachCallbacks(fetcher(toFetchRequest(url, data, options)), callback);
+    attachCallbacks(start(toFetchRequest(url, data, options)), callback);
   }
   (ajax as any).withCallers = (callers) => context.attach(ajax, callers);
   return ajax;

@@ -1,5 +1,6 @@
 import { expect } from 'chai';
 import { spec } from 'modules/kargoBidAdapter.js';
+import { server } from 'test/mocks/xhr.js';
 import { config } from 'src/config.js';
 import { getStorageManager } from 'src/storageManager.js';
 import { getGlobal } from '../../../src/prebidGlobal.js';
@@ -46,9 +47,6 @@ describe('kargo adapter tests', function() {
         },
         gpid: '/1234/prebid/slot/path',
       }
-    },
-    userId: {
-      tdid: 'random-tdid'
     },
     userIdAsEids: [
       {
@@ -268,6 +266,9 @@ describe('kargo adapter tests', function() {
     });
 
     beforeEach(function() {
+      // Each test must start without a Cerberus cookie or localStorage value from a previous run.
+      document.cookie = 'krg_crb=; Max-Age=0; Path=/';
+      localStorage.removeItem('krg_crb');
       undefinedCurrency = false;
       noAdServerCurrency = false;
       nonUSDAdServerCurrency = false;
@@ -315,7 +316,7 @@ describe('kargo adapter tests', function() {
       };
     });
     afterEach(function() {
-      cookies.forEach(key => document.cookie = `${key}=; expires=Thu, 01 Jan 1970 00:00:01 GMT; path=/`);
+      cookies.forEach(key => document.cookie = `${encodeURIComponent(key)}=; Max-Age=0; Path=/`);
       cookies = [];
 
       localStorageItems.forEach(key => localStorage.removeItem(key));
@@ -528,7 +529,7 @@ describe('kargo adapter tests', function() {
         topmostLocation: 'https://random.com/this/is/a/url'
       });
 
-      delete bidderRequest.refererInfo
+      delete bidderRequest.refererInfo;
       payload = getPayloadFromTestBids(testBids);
       expect(payload.ext).to.be.undefined;
     });
@@ -1026,7 +1027,7 @@ describe('kargo adapter tests', function() {
       it('retrieves CRB from localStorage and cookies', function() {
         setCrb('valid', 'valid');
 
-        const payload = getPayloadFromTestBids(testBids, bidderRequest);
+        const payload = getPayloadFromTestBids(testBids);
 
         expect(payload.rawCRB).to.equal(crbValues.valid);
         expect(payload.rawCRBLocalStorage).to.equal(crbValues.validLs);
@@ -1040,7 +1041,7 @@ describe('kargo adapter tests', function() {
       it('retrieves CRB from localStorage if cookie is missing', function() {
         setCrb(false, 'valid');
 
-        const payload = getPayloadFromTestBids(testBids, bidderRequest);
+        const payload = getPayloadFromTestBids(testBids);
 
         expect(payload.rawCRB).to.be.undefined;
         expect(payload.rawCRBLocalStorage).to.equal(crbValues.validLs);
@@ -1054,7 +1055,7 @@ describe('kargo adapter tests', function() {
       it('retrieves CRB from cookies if localstorage is missing', function() {
         setCrb('valid', false);
 
-        const payload = getPayloadFromTestBids(testBids, bidderRequest);
+        const payload = getPayloadFromTestBids(testBids);
 
         expect(payload.rawCRB).to.equal(crbValues.valid);
         expect(payload.rawCRBLocalStorage).to.be.undefined;
@@ -1071,7 +1072,7 @@ describe('kargo adapter tests', function() {
         sandbox.stub(STORAGE, 'getDataFromLocalStorage').throws();
         setCrb('valid', 'invalid');
 
-        const payload = getPayloadFromTestBids(testBids, bidderRequest);
+        const payload = getPayloadFromTestBids(testBids);
 
         expect(payload.rawCRB).to.equal(crbValues.valid);
         expect(payload.rawCRBLocalStorage).to.be.undefined;
@@ -1083,7 +1084,7 @@ describe('kargo adapter tests', function() {
       });
 
       it('does not fail if CRB is missing', function() {
-        const payload = getPayloadFromTestBids(testBids, bidderRequest);
+        const payload = getPayloadFromTestBids(testBids);
 
         expect(payload.rawCRB).to.be.undefined;
         expect(payload.rawCRBLocalStorage).to.be.undefined;
@@ -1097,7 +1098,7 @@ describe('kargo adapter tests', function() {
       it('fails gracefully if the CRB is invalid base 64 cookie', function() {
         setCrb('invalidB64', false);
 
-        const payload = getPayloadFromTestBids(testBids, bidderRequest);
+        const payload = getPayloadFromTestBids(testBids);
 
         expect(payload.rawCRB).to.equal(crbValues.invalidB64);
         expect(payload.rawCRBLocalStorage).to.be.undefined;
@@ -1111,7 +1112,7 @@ describe('kargo adapter tests', function() {
       it('fails gracefully if the CRB is invalid base 64 localStorage', function() {
         setCrb(false, 'invalidB64');
 
-        const payload = getPayloadFromTestBids(testBids, bidderRequest);
+        const payload = getPayloadFromTestBids(testBids);
 
         expect(payload.rawCRB).to.be.undefined;
         expect(payload.rawCRBLocalStorage).to.equal(crbValues.invalidB64Ls);
@@ -1134,7 +1135,7 @@ describe('kargo adapter tests', function() {
       ].forEach(config => {
         it(`uses ${config[2]} if the cookie is ${config[0]} and localStorage is ${config[1]}`, function() {
           setCrb(config[0], config[1]);
-          const payload = getPayloadFromTestBids(testBids, bidderRequest);
+          const payload = getPayloadFromTestBids(testBids);
 
           expect(payload.rawCRB).to.equal(crbValues[config[0]]);
           expect(payload.rawCRBLocalStorage).to.equal(crbValues[`${config[1]}Ls`]);
@@ -1162,21 +1163,21 @@ describe('kargo adapter tests', function() {
 
       it('uses the tdID from cerberus to populate the tdID field', function() {
         setCrb('valid', 'valid');
-        const payload = getPayloadFromTestBids(testBids, bidderRequest);
+        const payload = getPayloadFromTestBids(testBids);
 
         expect(payload.user.tdID).to.equal('test-tdid-cerberus-localstorage');
       });
 
       it('uses the lexId from cerberus to populate the kargoID field', function() {
         setCrb('valid', 'valid');
-        const payload = getPayloadFromTestBids(testBids, bidderRequest);
+        const payload = getPayloadFromTestBids(testBids);
 
         expect(payload.user.kargoID).to.equal('test-lexid-cerberus-localstorage');
       });
 
       it('uses the clientId from cerberus to populate the clientID field', function() {
         setCrb('valid', 'valid');
-        const payload = getPayloadFromTestBids(testBids, bidderRequest);
+        const payload = getPayloadFromTestBids(testBids);
 
         expect(payload.user.clientID).to.equal('test-clientid-cerberus-localstorage');
       });
@@ -1184,19 +1185,19 @@ describe('kargo adapter tests', function() {
       it('uses the optOut from cerberus to populate the clientID field', function() {
         setCrb('valid', 'valid');
         let payload;
-        payload = getPayloadFromTestBids(testBids, bidderRequest);
+        payload = getPayloadFromTestBids(testBids);
 
         expect(payload.user.optOut).to.equal(false);
 
         setLocalStorageValue('krg_crb', buildCrbValue(false, true, true, true, true, true));
-        payload = getPayloadFromTestBids(testBids, bidderRequest);
+        payload = getPayloadFromTestBids(testBids);
 
         expect(payload.user.optOut).to.equal(true);
       });
     });
 
     describe('user', function() {
-      it('fetches the trade desk id from the adapter if present', function() {
+      it('does not read the trade desk id from a raw bid.userId', function() {
         const payload = getPayloadFromTestBids([{
           ...minimumBidParams,
           userId: {
@@ -1204,7 +1205,7 @@ describe('kargo adapter tests', function() {
           }
         }]);
 
-        expect(payload.user.tdID).to.equal('test-tdid-module');
+        expect(payload.user.tdID).to.be.undefined;
       });
 
       it('fetches the trade desk id from cerberus if present', function() {
@@ -1217,7 +1218,7 @@ describe('kargo adapter tests', function() {
         expect(payload.user.tdID).to.equal('test-tdid-crb');
       });
 
-      it('fetches the trade desk id from the adapter if adapter and cerberus are present', function() {
+      it('fetches the trade desk id from cerberus even if a raw bid.userId is present', function() {
         setLocalStorageValue('krg_crb', buildCrbValue(false, true, true, true, true, false));
 
         const payload = getPayloadFromTestBids([{
@@ -1227,7 +1228,7 @@ describe('kargo adapter tests', function() {
           }
         }]);
 
-        expect(payload.user.tdID).to.equal('test-tdid-module');
+        expect(payload.user.tdID).to.equal('test-tdid-cerberus-localstorage');
       });
 
       it('does not set kargoId if it is not present', function() {
@@ -2077,19 +2078,9 @@ describe('kargo adapter tests', function() {
   });
 
   describe('onTimeout', function () {
-    let fetchStub;
-
-    beforeEach(function () {
-      fetchStub = sinon.stub(global, 'fetch').resolves(); // Stub fetch globally
-    });
-
-    afterEach(function () {
-      fetchStub.restore(); // Restore the original fetch function
-    });
-
     it('does not call fetch if timeout data is not provided', function () {
       spec.onTimeout(null);
-      expect(fetchStub.callCount).to.equal(0);
+      expect(server.requests.length).to.equal(0);
     });
 
     it('calls fetch with the correct URLs if timeout data is provided', function () {
@@ -2100,25 +2091,12 @@ describe('kargo adapter tests', function() {
         { auctionId: 'test-auction-id-4', timeout: 500 },
       ]);
 
-      expect(fetchStub.calledWith(
-        'https://krk2.kargo.com/api/v1/event/timeout?aid=test-auction-id&ato=400',
-        { method: 'GET', keepalive: true }
-      )).to.be.true;
-
-      expect(fetchStub.calledWith(
-        'https://krk2.kargo.com/api/v1/event/timeout?aid=test-auction-id-2&ato=100',
-        { method: 'GET', keepalive: true }
-      )).to.be.true;
-
-      expect(fetchStub.calledWith(
-        'https://krk2.kargo.com/api/v1/event/timeout?aid=test-auction-id-3&ato=450',
-        { method: 'GET', keepalive: true }
-      )).to.be.true;
-
-      expect(fetchStub.calledWith(
-        'https://krk2.kargo.com/api/v1/event/timeout?aid=test-auction-id-4&ato=500',
-        { method: 'GET', keepalive: true }
-      )).to.be.true;
+      expect(server.requests.map(({ url, method, fetch: { request } }) => [url, method, request.keepalive])).to.deep.equal([
+        ['https://krk2.kargo.com/api/v1/event/timeout?aid=test-auction-id&ato=400', 'GET', true],
+        ['https://krk2.kargo.com/api/v1/event/timeout?aid=test-auction-id-2&ato=100', 'GET', true],
+        ['https://krk2.kargo.com/api/v1/event/timeout?aid=test-auction-id-3&ato=450', 'GET', true],
+        ['https://krk2.kargo.com/api/v1/event/timeout?aid=test-auction-id-4&ato=500', 'GET', true],
+      ]);
     });
   });
 });

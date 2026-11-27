@@ -335,8 +335,8 @@ describe('cadent_aperture_mx Adapter', function () {
       });
 
       it('shouldn\'t contain a user obj without GDPR information', function () {
-        let request = spec.buildRequests(bidderRequest.bids, bidderRequest)
-        request = JSON.parse(request.data)
+        let request = spec.buildRequests(bidderRequest.bids, bidderRequest);
+        request = JSON.parse(request.data);
         expect(request).to.not.have.property('user');
       });
 
@@ -349,7 +349,7 @@ describe('cadent_aperture_mx Adapter', function () {
         };
         let request = spec.buildRequests(gdprBidderRequest.bids, gdprBidderRequest);
 
-        request = JSON.parse(request.data)
+        request = JSON.parse(request.data);
         expect(request.regs.ext).to.have.property('gdpr', 1);
         expect(request.user.ext).to.have.property('consent', consentString);
       });
@@ -360,7 +360,7 @@ describe('cadent_aperture_mx Adapter', function () {
           'gdprApplies': false
         };
         let request = spec.buildRequests(nonGdprBidderRequest.bids, nonGdprBidderRequest);
-        request = JSON.parse(request.data)
+        request = JSON.parse(request.data);
         expect(request.regs.ext).to.have.property('gdpr', 0);
         expect(request).to.not.have.property('user');
       });
@@ -405,7 +405,7 @@ describe('cadent_aperture_mx Adapter', function () {
       it('should add liveramp identitylink id to request', () => {
         const idl_env = '123';
         const bidRequestWithID = utils.deepClone(bidderRequest);
-        bidRequestWithID.userId = { idl_env };
+        bidRequestWithID.ortb2 = { user: { ext: { eids: [{ source: 'liveramp.com', uids: [{ id: idl_env, atype: 3 }] }] } } };
         let requestWithID = spec.buildRequests(bidRequestWithID.bids, bidRequestWithID);
         requestWithID = JSON.parse(requestWithID.data);
         expect(requestWithID.user.ext.eids[0]).to.deep.equal({
@@ -449,7 +449,7 @@ describe('cadent_aperture_mx Adapter', function () {
       it('should add UID 2.0 to request', () => {
         const uid2 = { id: '456' };
         const bidRequestWithUID = utils.deepClone(bidderRequest);
-        bidRequestWithUID.userId = { uid2 };
+        bidRequestWithUID.bids = bidRequestWithUID.bids.map(bid => ({ ...bid, userIdAsEids: [{ source: 'uidapi.com', uids: [{ id: uid2.id, atype: 3 }] }] }));
         let requestWithUID = spec.buildRequests(bidRequestWithUID.bids, bidRequestWithUID);
         requestWithUID = JSON.parse(requestWithUID.data);
         expect(requestWithUID.user.ext.eids[0]).to.deep.equal({
@@ -461,6 +461,14 @@ describe('cadent_aperture_mx Adapter', function () {
             }
           }]
         });
+      });
+
+      it('should only send supported EID sources', () => {
+        const bidRequestWithEids = utils.deepClone(bidderRequest);
+        bidRequestWithEids.ortb2 = { user: { ext: { eids: [{ source: 'example.com', uids: [{ id: 'other', atype: 1 }] }] } } };
+        let request = spec.buildRequests(bidRequestWithEids.bids, bidRequestWithEids);
+        request = JSON.parse(request.data);
+        expect(request.user?.ext?.eids).to.equal(undefined);
       });
     });
 
@@ -494,7 +502,7 @@ describe('cadent_aperture_mx Adapter', function () {
               const gppString = 'abcdefgh';
               gppCompliantBidderRequest.gppConsent = {
                 gppString
-              }
+              };
 
               let request = spec.buildRequests(gppCompliantBidderRequest.bids, gppCompliantBidderRequest);
               request = JSON.parse(request.data);
@@ -520,7 +528,7 @@ describe('cadent_aperture_mx Adapter', function () {
               const applicableSections = [8];
               gppCompliantBidderRequest.gppConsent = {
                 applicableSections
-              }
+              };
 
               let request = spec.buildRequests(gppCompliantBidderRequest.bids, gppCompliantBidderRequest);
               request = JSON.parse(request.data);
@@ -681,7 +689,7 @@ describe('cadent_aperture_mx Adapter', function () {
       const result = spec.interpretResponse({
         body: serverResponse
       });
-      expect(Array.isArray(result.seatbid))
+      expect(Array.isArray(result.seatbid));
 
       const ad0 = result[0];
       const ad1 = result[1];
@@ -751,7 +759,7 @@ describe('cadent_aperture_mx Adapter', function () {
       const ad0 = result[0];
       const ad1 = result[1];
       expect(ad0.renderer).to.exist.and.to.be.a('object');
-      expect(ad0.renderer.url).to.equal('https://js.brealtime.com/outstream/1.30.0/bundle.js');
+      expect(ad0.renderer.url).to.equal('https://js.ssp.cadent.com/outstream/1.30.0/bundle.js');
       expect(ad0.renderer.id).to.equal('987654321cba');
       expect(ad1.renderer).to.equal(undefined);
     });
@@ -794,7 +802,7 @@ describe('cadent_aperture_mx Adapter', function () {
       expect(syncs).to.not.be.an('undefined');
       expect(syncs).to.have.lengthOf(1);
       expect(syncs[0].type).to.equal('iframe');
-      expect(syncs[0].url).to.equal('https://biddr.brealtime.com/check.html')
+      expect(syncs[0].url).to.equal('https://js.ssp.cadent.com/check.html');
     });
 
     it('should pass gdpr params', function () {
@@ -805,7 +813,7 @@ describe('cadent_aperture_mx Adapter', function () {
       expect(syncs).to.have.lengthOf(1);
       expect(syncs[0].type).to.equal('iframe');
       expect(syncs[0].url).to.contains('gdpr=0');
-      expect(syncs[0].url).to.equal('https://biddr.brealtime.com/check.html?gdpr=0&gdpr_consent=test')
+      expect(syncs[0].url).to.equal('https://js.ssp.cadent.com/check.html?gdpr=0&gdpr_consent=test');
     });
 
     it('should pass us_privacy string', function () {
@@ -832,7 +840,7 @@ describe('cadent_aperture_mx Adapter', function () {
       expect(syncs[0].type).to.equal('iframe');
       expect(syncs[0].url).to.contains('gdpr=1');
       expect(syncs[0].url).to.contains('usp=test');
-      expect(syncs[0].url).to.equal('https://biddr.brealtime.com/check.html?gdpr=1&gdpr_consent=test&usp=test')
+      expect(syncs[0].url).to.equal('https://js.ssp.cadent.com/check.html?gdpr=1&gdpr_consent=test&usp=test');
     });
 
     it('should pass gpp string and section id', function() {
@@ -841,8 +849,8 @@ describe('cadent_aperture_mx Adapter', function () {
         applicableSections: [1, 2, 4]
       });
       expect(syncs).to.not.be.an('undefined');
-      expect(syncs[0].url).to.contains('gpp=abcdefgs')
-      expect(syncs[0].url).to.contains('gpp_sid=1,2,4')
+      expect(syncs[0].url).to.contains('gpp=abcdefgs');
+      expect(syncs[0].url).to.contains('gpp_sid=1,2,4');
     });
 
     it('should pass us_privacy and gdpr string and gpp string', function () {
@@ -865,7 +873,7 @@ describe('cadent_aperture_mx Adapter', function () {
       expect(syncs[0].url).to.contains('gdpr=1');
       expect(syncs[0].url).to.contains('usp=test');
       expect(syncs[0].url).to.contains('gpp=abcdefgs');
-      expect(syncs[0].url).to.equal('https://biddr.brealtime.com/check.html?gdpr=1&gdpr_consent=test&usp=test&gpp=abcdefgs&gpp_sid=1,2,4');
+      expect(syncs[0].url).to.equal('https://js.ssp.cadent.com/check.html?gdpr=1&gdpr_consent=test&usp=test&gpp=abcdefgs&gpp_sid=1,2,4');
     });
   });
 });

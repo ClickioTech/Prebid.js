@@ -21,12 +21,12 @@ export const spec = {
   code: BIDDER_CODE,
   supportedMediaTypes: [BANNER],
   buildRequests(bidRequests, bidderRequest) {
-    const data = converter.toORTB({ bidRequests, bidderRequest })
+    const data = converter.toORTB({ bidRequests, bidderRequest });
     return [{
       method: 'POST',
       url: 'https://o.clickiocdn.com/bids',
       data
-    }]
+    }];
   },
   isBidRequestValid(bid) {
     return true;

@@ -5,10 +5,10 @@ import { OPENRTB } from '../../../libraries/precisoUtils/bidNativeUtils.js';
 
 // simport { config } from '../../../src/config.js';
 
-const DEFAULT_PRICE = 1
-const DEFAULT_CURRENCY = 'USD'
-const DEFAULT_BANNER_WIDTH = 300
-const DEFAULT_BANNER_HEIGHT = 250
+const DEFAULT_PRICE = 1;
+const DEFAULT_CURRENCY = 'USD';
+const DEFAULT_BANNER_WIDTH = 300;
+const DEFAULT_BANNER_HEIGHT = 250;
 const BIDDER_CODE = 'preciso';
 
 describe('PrecisoAdapter', function () {
@@ -30,10 +30,10 @@ describe('PrecisoAdapter', function () {
       region: 'IND'
 
     },
-    userId: {
-      pubcid: '12355454test'
-
-    },
+    userIdAsEids: [{
+      source: 'pubcid.org',
+      uids: [{ id: '12355454test', atype: 1 }]
+    }],
     user: {
       geo: {
         region: 'IND',
@@ -69,10 +69,10 @@ describe('PrecisoAdapter', function () {
       region: 'IND'
 
     },
-    userId: {
-      pubcid: '12355454test'
-
-    },
+    userIdAsEids: [{
+      source: 'pubcid.org',
+      uids: [{ id: '12355454test', atype: 1 }]
+    }],
     user: {
       geo: {
         region: 'IND',
@@ -170,6 +170,50 @@ describe('PrecisoAdapter', function () {
       expect(data.device).to.be.undefined;
     });
 
+    describe('user.id (pubcid)', function () {
+      function bidWithout(...keys) {
+        const copy = JSON.parse(JSON.stringify(bid));
+        keys.forEach(k => delete copy[k]);
+        copy.ortb2.device = { w: 1920, h: 166 };
+        return copy;
+      }
+
+      it('should read user.id from the pubcid.org EID in userIdAsEids', function () {
+        const request = spec.buildRequests([bidWithout()]);
+        expect(request.data.user.id).to.equal('12355454test');
+      });
+
+      it('should not throw and should send an empty user.id when the bid has no user IDs', function () {
+        let request;
+        expect(() => { request = spec.buildRequests([bidWithout('userIdAsEids')], {}); }).to.not.throw();
+        expect(request.data.user.id).to.equal('');
+      });
+
+      it('should fall back to the pubcid.org EID in bidderRequest.ortb2.user.ext.eids', function () {
+        const bidderRequest = {
+          ortb2: {
+            user: {
+              ext: {
+                eids: [
+                  { source: 'example.com', uids: [{ id: 'other', atype: 1 }] },
+                  { source: 'pubcid.org', uids: [{ id: 'from-ortb2', atype: 1 }] }
+                ]
+              }
+            }
+          }
+        };
+        const request = spec.buildRequests([bidWithout('userIdAsEids')], bidderRequest);
+        expect(request.data.user.id).to.equal('from-ortb2');
+      });
+
+      it('should ignore a raw bid.userId', function () {
+        const rawBid = bidWithout('userIdAsEids');
+        rawBid.userId = { pubcid: 'raw' };
+        const request = spec.buildRequests([rawBid], {});
+        expect(request.data.user.id).to.equal('');
+      });
+    });
+
     let ServeNativeRequest = spec.buildRequests([nativeBid]);
 
     it('Creates a valid nativeServerRequest object ', function () {
@@ -183,7 +227,7 @@ describe('PrecisoAdapter', function () {
 
     it('should extract the native params', function () {
       let nativeData = ServeNativeRequest.data;
-      const asset = JSON.parse(nativeData.imp[0].native.request).assets[0]
+      const asset = JSON.parse(nativeData.imp[0].native.request).assets[0];
       expect(asset).to.deep.equal({
         id: OPENRTB.NATIVE.ASSET_ID.IMAGE,
         required: 1,
@@ -193,7 +237,7 @@ describe('PrecisoAdapter', function () {
           type: OPENRTB.NATIVE.IMAGE_TYPE.MAIN,
         }
       }
-      )
+      );
     });
   });
 
@@ -221,7 +265,7 @@ describe('PrecisoAdapter', function () {
             seat: BIDDER_CODE
           }
         ],
-      }
+      };
 
       const expectedResponse = [
         {
@@ -236,11 +280,11 @@ describe('PrecisoAdapter', function () {
           ttl: 300,
           meta: { advertiserDomains: [] },
         }
-      ]
-      const result = spec.interpretResponse({ body: response })
+      ];
+      const result = spec.interpretResponse({ body: response });
 
-      expect(Object.keys(result[0])).to.have.members(Object.keys(expectedResponse[0]))
-    })
+      expect(Object.keys(result[0])).to.have.members(Object.keys(expectedResponse[0]));
+    });
 
     it('should get correct native bid response', function () {
       const adm = {
@@ -268,7 +312,7 @@ describe('PrecisoAdapter', function () {
             }
           }],
         }
-      }
+      };
       let nativeResponse = {
         bidderRequestId: 'f6adb85f-4e19-45a0-b41e-2a5b9a48f23a',
         seatbid: [
@@ -289,7 +333,7 @@ describe('PrecisoAdapter', function () {
             seat: BIDDER_CODE
           }
         ],
-      }
+      };
 
       let expectedNativeResponse = [
         {
@@ -316,12 +360,12 @@ describe('PrecisoAdapter', function () {
             },
           }
         }
-      ]
+      ];
 
       let result = spec.interpretResponse({ body: nativeResponse });
       expect(Object.keys(result[0])).to.have.members(Object.keys(expectedNativeResponse[0]));
-    })
-  })
+    });
+  });
 
   describe('getUserSyncs', function () {
     const syncUrl = 'https://ck.2trk.info/rtb/user/usersync.aspx?id=NA&gdpr=0&gdpr_consent=&us_privacy=&t=4';

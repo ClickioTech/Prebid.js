@@ -73,11 +73,15 @@ describe('config API', function () {
   it('readConfig subscribers can unsubscribe', function () {
     const listener = sinon.spy();
 
-    const unsubscribe = getConfig(listener);
+    const unsubscribe = readConfig(listener);
+
+    setConfig({ logging: true });
+    sinon.assert.calledOnceWithExactly(listener, { logging: true });
+    listener.resetHistory();
 
     unsubscribe();
 
-    readConfig({ logging: true });
+    setConfig({ logging: false });
 
     sinon.assert.notCalled(listener);
   });
@@ -285,9 +289,18 @@ describe('config API', function () {
 
   it('does not force defaults for bidder config', () => {
     config.setConfig({ bidderSequence: 'fixed' });
-    config.setBidderConfig({ bidders: ['mockBidder'], config: { other: 'config' } })
+    config.setBidderConfig({ bidders: ['mockBidder'], config: { other: 'config' } });
     expect(config.runWithBidder('mockBidder', () => config.getConfig('bidderSequence'))).to.eql('fixed');
-  })
+  });
+
+  it('restores the outer bidder after a nested runWithBidder', () => {
+    const seen = config.runWithBidder('outer', () => {
+      config.runWithBidder('inner', () => null);
+      return config.getCurrentBidder();
+    });
+    expect(seen).to.eql('outer');
+    expect(config.getCurrentBidder()).to.be.null;
+  });
 
   it('sets deviceAccess', function () {
     // When the deviceAccess flag config option is not set, cookies may be read and set
@@ -332,7 +345,7 @@ describe('config API', function () {
   it('sets auctionOptions secondaryBidders', function () {
     const auctionOptionsConfig = {
       'secondaryBidders': ['rubicon', 'appnexus']
-    }
+    };
     setConfig({ auctionOptions: auctionOptionsConfig });
     expect(getConfig('auctionOptions')).to.eql(auctionOptionsConfig);
   });
@@ -340,7 +353,7 @@ describe('config API', function () {
   it('sets auctionOptions suppressStaleRender', function () {
     const auctionOptionsConfig = {
       'suppressStaleRender': true
-    }
+    };
     setConfig({ auctionOptions: auctionOptionsConfig });
     expect(getConfig('auctionOptions')).to.eql(auctionOptionsConfig);
   });
@@ -348,9 +361,47 @@ describe('config API', function () {
   it('sets auctionOptions suppressExpiredRender', function () {
     const auctionOptionsConfig = {
       'suppressExpiredRender': true
-    }
+    };
     setConfig({ auctionOptions: auctionOptionsConfig });
     expect(getConfig('auctionOptions')).to.eql(auctionOptionsConfig);
+  });
+
+  it('sets auctionOptions viewabilityMeasurement', function () {
+    const auctionOptionsConfig = {
+      'viewabilityMeasurement': 'boundingBox'
+    };
+    setConfig({ auctionOptions: auctionOptionsConfig });
+    expect(getConfig('auctionOptions')).to.eql(auctionOptionsConfig);
+  });
+
+  it('should log warning for invalid auctionOptions viewabilityMeasurement', function () {
+    setConfig({
+      auctionOptions: {
+        'viewabilityMeasurement': 'nope',
+      }
+    });
+    expect(logWarnSpy.calledOnce).to.equal(true);
+    const warning = 'Auction Options viewabilityMeasurement must be one of: observer, boundingBox';
+    assert.ok(logWarnSpy.calledWith(warning), 'expected warning was logged');
+  });
+
+  it('sets auctionOptions replaceExpiredBid', function () {
+    const auctionOptionsConfig = {
+      replaceExpiredBid: () => null
+    };
+    setConfig({ auctionOptions: auctionOptionsConfig });
+    expect(getConfig('auctionOptions')).to.eql(auctionOptionsConfig);
+  });
+
+  it('should log warning for invalid auctionOptions replaceExpiredBid', function () {
+    setConfig({
+      auctionOptions: {
+        replaceExpiredBid: true,
+      }
+    });
+    expect(logWarnSpy.calledOnce).to.equal(true);
+    const warning = 'Auction Options replaceExpiredBid must be a function';
+    assert.ok(logWarnSpy.calledWith(warning), 'expected warning was logged');
   });
 
   it('should log warning for the wrong value passed to auctionOptions', function () {
@@ -445,7 +496,7 @@ describe('config API', function () {
           }
         }
       }
-    }
+    };
     expect(getConfig('ortb2')).to.deep.equal(expected);
   });
 
@@ -461,7 +512,7 @@ describe('config API', function () {
           }
         }
       }
-    }
+    };
     setConfig({
       ortb2: {
         user: {
@@ -483,7 +534,7 @@ describe('config API', function () {
           }
         }
       }
-    }
+    };
     expect(getConfig('ortb2')).to.deep.equal(expected);
   });
 
@@ -630,7 +681,7 @@ describe('config API', function () {
           }
         }
       }
-    }
+    };
     expect(getBidderConfig()).to.deep.equal(expected);
   });
 
@@ -706,7 +757,7 @@ describe('config API', function () {
           id: '1955'
         }
       ]
-    }
+    };
 
     setConfig({
       bidderTimeout: 2000,
@@ -762,7 +813,7 @@ describe('config API', function () {
         }
       }
     });
-    config.runWithBidder('bidder', () => config.getConfig())
+    config.runWithBidder('bidder', () => config.getConfig());
     expect(config.getConfig('outer')).to.eql({
       inner: ['global']
     });

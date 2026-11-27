@@ -1,13 +1,13 @@
 import { BANNER, NATIVE, VIDEO } from '../src/mediaTypes.js';
-import { _each, deepAccess, getWinDimensions, logError, logWarn, parseSizesInput } from '../src/utils.js';
+import { _each, deepAccess, getWinDimensions, getWindowTop, logError, logWarn, parseSizesInput, sizesToSizeTuples } from '../src/utils.js';
 import { getDevicePixelRatio } from '../libraries/devicePixelRatio/devicePixelRatio.js';
 
-import { config } from '../src/config.js';
 import { getStorageManager } from '../src/storageManager.js';
 
 import { registerBidder } from '../src/adapters/bidderFactory.js';
 import { getConnectionInfo } from '../libraries/connectionInfo/connectionUtils.js';
 import { getDNT } from '../libraries/dnt/index.js';
+import { coppaDataHandler } from '../src/consentHandler.js';
 
 /**
  * @typedef {import('../src/adapters/bidderFactory.js').BidRequest} BidRequest
@@ -22,11 +22,11 @@ const BIDDER_CODE = 'gumgum';
 const storage = getStorageManager({ bidderCode: BIDDER_CODE });
 const ALIAS_BIDDER_CODE = ['gg'];
 const BID_ENDPOINT = `https://g2.gumgum.com/hbid/imp`;
-const JCSI = { t: 0, rq: 8, pbv: '$prebid.version$' }
+const JCSI = { t: 0, rq: 8, pbv: '$prebid.version$' };
 const SUPPORTED_MEDIA_TYPES = [BANNER, NATIVE, VIDEO];
 const TIME_TO_LIVE = 60;
 const DELAY_REQUEST_TIME = 1800000; // setting to 30 mins
-const pubProvidedIdSources = ['dac.co.jp', 'audigent.com', 'id5-sync.com', 'liveramp.com', 'intentiq.com', 'liveintent.com', 'crwdcntrl.net', 'quantcast.com', 'adserver.org', 'yahoo.com']
+const pubProvidedIdSources = ['dac.co.jp', 'audigent.com', 'id5-sync.com', 'liveramp.com', 'intentiq.com', 'liveintent.com', 'crwdcntrl.net', 'quantcast.com', 'adserver.org', 'yahoo.com', 'growthcode.io'];
 
 const invalidRequestIds = {};
 let pageViewId = null;
@@ -35,11 +35,11 @@ let pageViewId = null;
 function _getBrowserParams(topWindowUrl, mosttopLocation) {
   const paramRegex = paramName => new RegExp(`[?#&](${paramName}=(.*?))($|&)`, 'i');
 
-  let browserParams = {};
+  let browserParams;
   let topWindow;
   let topScreen;
   let topUrl;
-  let mosttopURL
+  let mosttopURL;
   let ggad;
   let ggdeal;
   let ns;
@@ -51,7 +51,7 @@ function _getBrowserParams(topWindowUrl, mosttopLocation) {
   }
 
   function getOgURL () {
-    let ogURL = '';
+    let ogURL;
     const ogURLSelector = "meta[property='og:url']";
     const head = document && document.getElementsByTagName('head')[0];
     const ogURLElement = head.querySelector(ogURLSelector);
@@ -74,14 +74,17 @@ function _getBrowserParams(topWindowUrl, mosttopLocation) {
     }, url);
   }
 
+  // Always keep referer-based params even if top window/screen is inaccessible
+  topUrl = topWindowUrl || '';
+  mosttopURL = mosttopLocation || '';
+
   try {
-    topWindow = global.top;
+    topWindow = getWindowTop();
     topScreen = topWindow.screen;
-    topUrl = topWindowUrl || '';
-    mosttopURL = mosttopLocation || '';
   } catch (error) {
     logError(error);
-    return browserParams;
+    topWindow = window;
+    topScreen = window.screen || {};
   }
 
   browserParams = {
@@ -112,7 +115,9 @@ function _getBrowserParams(topWindowUrl, mosttopLocation) {
 }
 
 function getWrapperCode(wrapper, data) {
-  return wrapper.replace('AD_JSON', window.btoa(JSON.stringify(data)))
+  // btoa only takes Latin-1, and gumgum.js decodes with plain atob, so escape the rest for JSON.parse.
+  const json = JSON.stringify(data).replace(/[\u0100-\uffff]/g, ch => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
+  return wrapper.replace('AD_JSON', window.btoa(json));
 }
 
 /**
@@ -132,7 +137,7 @@ function _serializeSupplyChainObj(schainObj) {
     serializedSchain += `${encodeURIComponent(node['rid'] || '')},`;
     serializedSchain += `${encodeURIComponent(node['name'] || '')},`;
     serializedSchain += `${encodeURIComponent(node['domain'] || '')}`;
-  })
+  });
 
   return serializedSchain;
 }
@@ -149,7 +154,7 @@ function isBidRequestValid(bid) {
     adUnitCode
   } = bid;
   const legacyParamID = params.inScreen || params.inScreenPubID || params.inSlot || params.ICV || params.video || params.inVideo;
-  const id = legacyParamID || params.slot || params.native || params.zone || params.pubID;
+  const id = legacyParamID || params.slot || params.native || params.zone || params.pubId;
 
   if (invalidRequestIds[id]) {
     logWarn(`[GumGum] Please check the implementation for ${id} for the placement ${adUnitCode}`);
@@ -249,8 +254,13 @@ function _getVidParams(attributes) {
  * @param {Object} bid - The bid object which may contain a method to get dynamic floor values.
  * @returns {Object} An object containing the calculated bid floor and its currency.
  */
-function _getFloor(mediaTypes, staticBidFloor, bid) {
-  const curMediaType = Object.keys(mediaTypes)[0] || 'banner';
+function _getFloor(mediaTypes, staticBidFloor, bid, params = {}) {
+  // Multi-format units configured for in-slot display are served as banner
+  // (see buildRequests), so their floor is the banner floor regardless of
+  // the order mediaTypes happens to list its keys in.
+  const curMediaType = (mediaTypes.banner && (params.inSlot || params.slot))
+    ? 'banner'
+    : (Object.keys(mediaTypes)[0] || 'banner');
   const bidFloor = { floor: 0, currency: 'USD' };
 
   if (typeof bid.getFloor === 'function') {
@@ -265,7 +275,7 @@ function _getFloor(mediaTypes, staticBidFloor, bid) {
       bidFloor.floor = Math.max(staticBidFloor, parseFloat(floor));
     }
   } else if (staticBidFloor) {
-    bidFloor.floor = staticBidFloor
+    bidFloor.floor = staticBidFloor;
   }
 
   return bidFloor;
@@ -297,7 +307,7 @@ function _getDeviceData(ortb2Data) {
     pxratio: _device.pxratio,
     lmt: _device.lmt,
     ifa: _device.lmt !== 1 ? _device.ifa : undefined,
-    foddid: _device?.ext?.fiftyonedegrees_deviceId,
+    foddid: _device?.ext?.fod?.deviceId,
   };
 
   // return device data params with only non-empty values
@@ -465,10 +475,10 @@ function buildRequests(validBidRequests, bidderRequest) {
   const gdprConsent = bidderRequest && bidderRequest.gdprConsent;
   const uspConsent = bidderRequest && bidderRequest.uspConsent;
   const gppConsent = bidderRequest && bidderRequest.gppConsent;
-  const timeout = bidderRequest && bidderRequest.timeout
-  const coppa = config.getConfig('coppa') === true ? 1 : 0;
+  const timeout = bidderRequest && bidderRequest.timeout;
+  const coppa = (bidderRequest?.ortb2?.regs?.coppa === 1 || coppaDataHandler.getCoppa()) ? 1 : 0;
   const topWindowUrl = bidderRequest && bidderRequest.refererInfo && bidderRequest.refererInfo.page;
-  const mosttopLocation = bidderRequest && bidderRequest.refererInfo && bidderRequest.refererInfo.topmostLocation
+  const mosttopLocation = bidderRequest && bidderRequest.refererInfo && bidderRequest.refererInfo.topmostLocation;
   _each(validBidRequests, bidRequest => {
     const {
       bidId,
@@ -477,11 +487,11 @@ function buildRequests(validBidRequests, bidderRequest) {
       ortb2Imp,
       adUnitCode = ''
     } = bidRequest;
-    const { currency, floor } = _getFloor(mediaTypes, params.bidfloor, bidRequest);
+    const { currency, floor } = _getFloor(mediaTypes, params.bidfloor, bidRequest, params);
     const userEids = getUserEids(bidRequest, bidderRequest);
     const eids = getEidsFromEidsArray(userEids);
     const gpid = deepAccess(ortb2Imp, 'ext.gpid');
-    let sizes = [1, 1];
+    let sizes = [[1, 1]];
     let data = {};
     data.displaymanager = 'Prebid.js - gumgum';
     data.displaymanagerver = '$prebid.version$';
@@ -508,15 +518,15 @@ function buildRequests(validBidRequests, bidderRequest) {
       const maxLength = 1800; // replace this with your desired maximum length
       const truncatedJsonString = jsoStringifynWithMaxLength(filteredData, maxLength);
       if (filteredData.length) {
-        data.pubProvidedId = truncatedJsonString
+        data.pubProvidedId = truncatedJsonString;
       }
     }
     // ADJS-1286 Read id5 id linktype field
     const id5Eid = userEids.find(eid => (eid.source || '').toLowerCase() === 'id5-sync.com');
     const id5Uid = getFirstUid(id5Eid);
     if (id5Uid && id5Uid.ext) {
-      data.id5Id = id5Uid.id || null
-      data.id5IdLinkType = id5Uid.ext.linkType || null
+      data.id5Id = id5Uid.id || null;
+      data.id5IdLinkType = id5Uid.ext.linkType || null;
     }
     // ADTS-169 add adUnitCode to requests
     if (adUnitCode) data.aun = adUnitCode;
@@ -524,13 +534,18 @@ function buildRequests(validBidRequests, bidderRequest) {
     // ADTS-134 Retrieve ID envelopes
     for (const eid in eids) data[eid] = eids[eid];
 
-    if (mediaTypes.native) {
-      sizes = [1, 1];
+    if (mediaTypes.banner && (params.inSlot || params.slot)) {
+      // Multi-format (banner + native) units configured for in-slot display keep
+      // their banner sizes: the inSlot/slot paths below treat `sizes` as an array
+      // of [w, h] tuples, and publishers configured these units for banner.
+      sizes = mediaTypes.banner.sizes;
+    } else if (mediaTypes.native) {
+      sizes = [[1, 1]];
     } else if (mediaTypes.banner) {
       sizes = mediaTypes.banner.sizes;
     } else if (mediaTypes.video) {
       sizes = mediaTypes.video.playerSize;
-      data = _getVidParams(mediaTypes.video);
+      Object.assign(data, _getVidParams(mediaTypes.video));
     }
 
     // ADJS-1024 & ADSS-1297 & ADTS-175
@@ -592,15 +607,15 @@ function buildRequests(validBidRequests, bidderRequest) {
       data.uspConsent = uspConsent;
     }
     if (gppConsent) {
-      data.gppString = bidderRequest.gppConsent.gppString ? bidderRequest.gppConsent.gppString : ''
-      data.gppSid = Array.isArray(bidderRequest.gppConsent.applicableSections) ? bidderRequest.gppConsent.applicableSections.join(',') : ''
+      data.gppString = bidderRequest.gppConsent.gppString ? bidderRequest.gppConsent.gppString : '';
+      data.gppSid = Array.isArray(bidderRequest.gppConsent.applicableSections) ? bidderRequest.gppConsent.applicableSections.join(',') : '';
     } else if (!gppConsent && bidderRequest?.ortb2?.regs?.gpp) {
-      data.gppString = bidderRequest.ortb2.regs.gpp
-      data.gppSid = Array.isArray(bidderRequest.ortb2.regs.gpp_sid) ? bidderRequest.ortb2.regs.gpp_sid.join(',') : ''
+      data.gppString = bidderRequest.ortb2.regs.gpp;
+      data.gppSid = Array.isArray(bidderRequest.ortb2.regs.gpp_sid) ? bidderRequest.ortb2.regs.gpp_sid.join(',') : '';
     }
     const dsa = deepAccess(bidderRequest, 'ortb2.regs.ext.dsa');
     if (dsa) {
-      data.dsa = JSON.stringify(dsa)
+      data.dsa = JSON.stringify(dsa);
     }
     if (coppa) {
       data.coppa = coppa;
@@ -610,7 +625,7 @@ function buildRequests(validBidRequests, bidderRequest) {
       data.schain = _serializeSupplyChainObj(schain);
     }
     const tId = deepAccess(ortb2Imp, 'ext.tid') || deepAccess(bidderRequest, 'ortb2.source.tid') || '';
-    data.tId = tId
+    data.tId = tId;
     Object.assign(
       data,
       _getBrowserParams(topWindowUrl, mosttopLocation),
@@ -635,7 +650,8 @@ export function getCids(site) {
   if (site.content && Array.isArray(site.content.data)) {
     for (const dataItem of site.content.data) {
       if (typeof dataItem?.name === 'string' && (dataItem.name.includes('iris.com') || dataItem.name.includes('iris.tv'))) {
-        return Array.isArray(dataItem.ext?.cids) ? dataItem.ext.cids.join(',') : '';
+        const cids = dataItem.cids ?? dataItem.ext?.cids;
+        return Array.isArray(cids) ? cids.join(',') : '';
       }
     }
   }
@@ -697,8 +713,8 @@ function handleLegacyParams(params, sizes) {
  * @return {Bid[]} An array of bids which were nested inside the server.
  */
 function interpretResponse(serverResponse, bidRequest) {
-  const bidResponses = []
-  const serverResponseBody = serverResponse.body
+  const bidResponses = [];
+  const serverResponseBody = serverResponse.body;
 
   if (!serverResponseBody || serverResponseBody.err) {
     const data = bidRequest.data || {};
@@ -727,7 +743,7 @@ function interpretResponse(serverResponse, bidRequest) {
       adomain: [],
       mediaType: ''
     }
-  }
+  };
   const {
     ad: {
       price: cpm,
@@ -765,22 +781,22 @@ function interpretResponse(serverResponse, bidRequest) {
     sizes = ['1x1'];
   // added logic for in-slot multi-szie
   } else if ((product === 2 && sizes.includes('1x1')) || product === 3) {
-    const requestSizesThatMatchResponse = (bidRequest.sizes && bidRequest.sizes.reduce((result, current) => {
+    const requestSizesThatMatchResponse = (bidRequest.sizes && sizesToSizeTuples(bidRequest.sizes).reduce((result, current) => {
       const [width, height] = current;
       if (responseWidth === width && responseHeight === height) result.push(current.join('x'));
-      return result
+      return result;
     }, [])) || [];
-    sizes = requestSizesThatMatchResponse.length ? requestSizesThatMatchResponse : parseSizesInput(bidRequest.sizes)
+    sizes = requestSizesThatMatchResponse.length ? requestSizesThatMatchResponse : parseSizesInput(bidRequest.sizes);
   }
 
   const [width, height] = sizes[0].split('x');
 
   if (jcsi) {
-    serverResponseBody.jcsi = JCSI
+    serverResponseBody.jcsi = JCSI;
   }
 
   // update Page View ID from server response
-  pageViewId = pvid
+  pageViewId = pvid;
 
   if (creativeId) {
     const bid = {
@@ -809,7 +825,7 @@ function interpretResponse(serverResponse, bidRequest) {
 
     bidResponses.push(bid);
   }
-  return bidResponses
+  return bidResponses;
 }
 
 /**
@@ -821,17 +837,17 @@ function interpretResponse(serverResponse, bidRequest) {
  */
 function getUserSyncs(syncOptions, serverResponses) {
   const responses = serverResponses.map((response) => {
-    return (response.body && response.body.pxs && response.body.pxs.scr) || []
-  })
+    return (response.body && response.body.pxs && response.body.pxs.scr) || [];
+  });
   const userSyncs = responses.reduce(function (usersyncs, response) {
-    return usersyncs.concat(response)
-  }, [])
+    return usersyncs.concat(response);
+  }, []);
   const syncs = userSyncs.map((sync) => {
     return {
       type: sync.t === 'f' ? 'iframe' : 'image',
       url: sync.u
-    }
-  })
+    };
+  });
   return syncs;
 }
 
@@ -844,5 +860,5 @@ export const spec = {
   interpretResponse,
   getUserSyncs,
   supportedMediaTypes: SUPPORTED_MEDIA_TYPES
-}
-registerBidder(spec)
+};
+registerBidder(spec);

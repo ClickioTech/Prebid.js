@@ -9,7 +9,7 @@ const defaultConfigParams = {
   p: ['def', 'hij'],
   url: 'http://localhost:9999/test/mocks/fabrickId.json?'
 };
-const responseHeader = { 'Content-Type': 'application/json' }
+const responseHeader = { 'Content-Type': 'application/json' };
 
 describe('Fabrick ID System', function() {
   let logErrorStub;
@@ -76,6 +76,16 @@ describe('Fabrick ID System', function() {
       JSON.stringify({})
     );
     expect(callBackSpy.calledOnce).to.be.true;
+  });
+
+  [[true, 'lmt=1'], [false, 'lmt=0'], ['1', 'lmt=1'], [0, 'lmt=0']].forEach(([lmt, expected]) => {
+    it(`should send lmt ${JSON.stringify(lmt)} as ${expected}`, function() {
+      fabrickIdSubmodule.getId({
+        name: 'fabrickId',
+        params: Object.assign({}, defaultConfigParams, { lmt })
+      }).callback(sinon.spy());
+      expect(server.requests[0].url).to.match(new RegExp(`[?&]${expected}(&|$)`));
+    });
   });
 
   it('should complete successfully', function() {

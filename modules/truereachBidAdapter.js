@@ -4,10 +4,12 @@ import { BANNER } from '../src/mediaTypes.js';
 
 const SUPPORTED_AD_TYPES = [BANNER];
 const BIDDER_CODE = 'truereach';
+const ACP_ID = 3196; // Google Additional Consent provider ID
 const BIDDER_URL = 'https://ads-sg.momagic.com/exchange/openrtb25/';
 
 export const spec = {
   code: BIDDER_CODE,
+  acpId: ACP_ID,
   supportedMediaTypes: SUPPORTED_AD_TYPES,
 
   isBidRequestValid: function (bidRequest) {
@@ -81,7 +83,7 @@ export const spec = {
     return bidResponses;
   },
   getUserSyncs: function(syncOptions, serverResponses, gdprConsent, uspConsent) {
-    const syncs = []
+    const syncs = [];
 
     var gdprParams = '';
     if (gdprConsent) {
@@ -104,8 +106,8 @@ export const spec = {
 };
 
 function buildCommonQueryParamsFromBids(validBidRequests, bidderRequest) {
-  let adW = 0;
-  let adH = 0;
+  let adW;
+  let adH;
   const adSizes = Array.isArray(validBidRequests[0].params.sizes) ? validBidRequests[0].params.sizes : validBidRequests[0].sizes;
   const sizeArrayLength = adSizes.length;
   if (sizeArrayLength === 2 && typeof adSizes[0] === 'number' && typeof adSizes[1] === 'number') {
@@ -135,7 +137,7 @@ function buildCommonQueryParamsFromBids(validBidRequests, bidderRequest) {
       page: page
     },
     device: {
-      ua: window.navigator.userAgent
+      ua: bidderRequest.ortb2?.device?.ua
     },
     tmax: bidderRequest.timeout
   };

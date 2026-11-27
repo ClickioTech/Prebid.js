@@ -4,6 +4,7 @@ import {
 } from '../../../modules/sonaradsBidAdapter.js';
 import * as utils from 'src/utils.js';
 import * as ajax from 'src/ajax.js';
+import { server } from 'test/mocks/xhr.js';
 import { hook } from '../../../src/hook.js';
 import { config } from '../../../src/config.js';
 import { addFPDToBidderRequest } from '../../helpers/fpd.js';
@@ -17,20 +18,18 @@ import sinon from 'sinon';
 const SITE_DOMAIN_NAME = 'sonargames.com';
 const SITE_PAGE = 'https://sonargames.com';
 describe('bridgeuppBidAdapter_spec', function () {
-  let utilsMock, sandbox, ajaxStub, fetchStub;
+  let utilsMock, sandbox, ajaxStub;
 
   afterEach(function () {
     sandbox.restore();
     utilsMock.restore();
     ajaxStub.restore();
-    fetchStub.restore();
   });
 
   beforeEach(function () {
     sandbox = sinon.createSandbox();
     utilsMock = sinon.mock(utils);
     ajaxStub = sandbox.stub(ajax, 'ajax');
-    fetchStub = sinon.stub(global, 'fetch').resolves(new Response('OK'));
   });
 
   describe('isBidRequestValid', function () {
@@ -55,7 +54,7 @@ describe('bridgeuppBidAdapter_spec', function () {
   describe('buildRequests', function () {
     before(() => {
       hook.ready();
-    })
+    });
     afterEach(function () {
       config.resetConfig();
     });
@@ -102,7 +101,7 @@ describe('bridgeuppBidAdapter_spec', function () {
     it('request should build with correct imp', async function () {
       const expectedMetric = {
         url: 'https://sonarads.com'
-      }
+      };
       const bidRequests = [{
         bidId: 'bidId',
         bidder: 'sonarads',
@@ -182,7 +181,7 @@ describe('bridgeuppBidAdapter_spec', function () {
       expect(ortbRequest.site.sectioncat).to.deep.equal(['IAB4']);
       expect(ortbRequest.site.ref).to.equal('google.com');
       expect(ortbRequest.site.privacypolicy).to.equal(1);
-      expect(ortbRequest.site.content.url).to.equal(SITE_PAGE + '/games1')
+      expect(ortbRequest.site.content.url).to.equal(SITE_PAGE + '/games1');
     });
 
     it('request should build with proper device data', async function () {
@@ -307,7 +306,7 @@ describe('bridgeuppBidAdapter_spec', function () {
             }
           }
         }
-      }
+      };
       const request = spec.buildRequests(bidRequests, await addFPDToBidderRequest(br));
       const ortbRequest = request.data;
       expect(ortbRequest.user.yob).to.deep.equal(2012);
@@ -650,7 +649,7 @@ describe('bridgeuppBidAdapter_spec', function () {
         },
         apiVersion: 1,
       },
-    }
+    };
 
     function mockResponse(bidId, mediaType) {
       return {
@@ -692,7 +691,7 @@ describe('bridgeuppBidAdapter_spec', function () {
             ]
           }
         }
-      }
+      };
     }
 
     it('should returns an empty array when bid response is empty', async function () {
@@ -701,7 +700,7 @@ describe('bridgeuppBidAdapter_spec', function () {
       const serverResponse = {
         headers: {
           get: function () {
-            return undefined
+            return undefined;
           }
         },
         body: {}
@@ -718,7 +717,7 @@ describe('bridgeuppBidAdapter_spec', function () {
       const serverResponse = {
         headers: {
           get: function () {
-            return undefined
+            return undefined;
           }
         },
         body: { seatbid: [] }
@@ -746,7 +745,7 @@ describe('bridgeuppBidAdapter_spec', function () {
       const serverResponse = {
         headers: {
           get: function () {
-            return undefined
+            return undefined;
           }
         },
         body: mockResponse('bidId', 1)
@@ -926,26 +925,22 @@ describe('bridgeuppBidAdapter_spec', function () {
       });
 
       // assert statements
-      expect(fetchStub.callCount).to.be.equal(1);
+      expect(server.requests.length).to.be.equal(1);
 
-      const fetchArgs = fetchStub.getCall(0).args;
-      expect(fetchArgs[0]).to.equal(expectedUrl);
-      const actualPayload = fetchArgs[1]?.body;
+      const fetchRequest = server.requests[0];
+      expect(fetchRequest.url).to.equal(expectedUrl);
+      const actualPayload = fetchRequest.requestBody;
       expect(actualPayload).to.equal(expectedPayload);
-      expect(fetchArgs[1]).to.deep.include({
-        method: 'POST',
-        keepalive: true,
-      });
-      expect(fetchArgs[1]?.headers).to.deep.equal({
-        'Content-Type': 'application/json',
-      });
+      expect(fetchRequest.method).to.equal('POST');
+      expect(fetchRequest.fetch.request.keepalive).to.be.true;
+      expect(fetchRequest.requestHeaders['Content-Type']).to.equal('application/json');
     });
 
     it('onTimeout should not be called if the bid data is null', function () {
       // Call onTimeout with null data
       spec.onTimeout(null);
       // Assert that ajax was not called since bid data is null
-      expect(fetchStub.callCount).to.be.equal(0);
+      expect(server.requests.length).to.be.equal(0);
     });
   });
 
@@ -977,26 +972,22 @@ describe('bridgeuppBidAdapter_spec', function () {
       });
 
       // assert statements
-      expect(fetchStub.callCount).to.be.equal(1);
+      expect(server.requests.length).to.be.equal(1);
 
-      const fetchArgs = fetchStub.getCall(0).args;
-      expect(fetchArgs[0]).to.equal(expectedUrl);
-      const actualPayload = fetchArgs[1]?.body;
+      const fetchRequest = server.requests[0];
+      expect(fetchRequest.url).to.equal(expectedUrl);
+      const actualPayload = fetchRequest.requestBody;
       expect(actualPayload).to.equal(expectedPayload);
-      expect(fetchArgs[1]).to.deep.include({
-        method: 'POST',
-        keepalive: true,
-      });
-      expect(fetchArgs[1]?.headers).to.deep.equal({
-        'Content-Type': 'application/json',
-      });
+      expect(fetchRequest.method).to.equal('POST');
+      expect(fetchRequest.fetch.request.keepalive).to.be.true;
+      expect(fetchRequest.requestHeaders['Content-Type']).to.equal('application/json');
     });
 
     it('onSetTargeting should not be called if the bid data is null', function () {
       // Call onSetTargeting with null data
       spec.onSetTargeting(null);
       // Assert that ajax was not called since bid data is null
-      expect(fetchStub.callCount).to.be.equal(0);
+      expect(server.requests.length).to.be.equal(0);
     });
   });
 
@@ -1029,26 +1020,22 @@ describe('bridgeuppBidAdapter_spec', function () {
       });
 
       // assert statements
-      expect(fetchStub.callCount).to.be.equal(1);
+      expect(server.requests.length).to.be.equal(1);
 
-      const fetchArgs = fetchStub.getCall(0).args;
-      expect(fetchArgs[0]).to.equal(expectedUrl);
-      const actualPayload = fetchArgs[1]?.body;
+      const fetchRequest = server.requests[0];
+      expect(fetchRequest.url).to.equal(expectedUrl);
+      const actualPayload = fetchRequest.requestBody;
       expect(actualPayload).to.equal(expectedPayload);
-      expect(fetchArgs[1]).to.deep.include({
-        method: 'POST',
-        keepalive: true,
-      });
-      expect(fetchArgs[1]?.headers).to.deep.equal({
-        'Content-Type': 'application/json',
-      });
+      expect(fetchRequest.method).to.equal('POST');
+      expect(fetchRequest.fetch.request.keepalive).to.be.true;
+      expect(fetchRequest.requestHeaders['Content-Type']).to.equal('application/json');
     });
 
     it('onAdRenderSucceeded should not be called if the bid data is null', function () {
       // Call onAdRenderSucceeded with null data
       spec.onAdRenderSucceeded(null);
       // Assert that ajax was not called since bid data is null
-      expect(fetchStub.callCount).to.be.equal(0);
+      expect(server.requests.length).to.be.equal(0);
     });
   });
 
@@ -1080,26 +1067,22 @@ describe('bridgeuppBidAdapter_spec', function () {
       });
 
       // assert statements
-      expect(fetchStub.callCount).to.be.equal(1);
+      expect(server.requests.length).to.be.equal(1);
 
-      const fetchArgs = fetchStub.getCall(0).args;
-      expect(fetchArgs[0]).to.equal(expectedUrl);
-      const actualPayload = fetchArgs[1]?.body;
+      const fetchRequest = server.requests[0];
+      expect(fetchRequest.url).to.equal(expectedUrl);
+      const actualPayload = fetchRequest.requestBody;
       expect(actualPayload).to.equal(expectedPayload);
-      expect(fetchArgs[1]).to.deep.include({
-        method: 'POST',
-        keepalive: true,
-      });
-      expect(fetchArgs[1]?.headers).to.deep.equal({
-        'Content-Type': 'application/json',
-      });
+      expect(fetchRequest.method).to.equal('POST');
+      expect(fetchRequest.fetch.request.keepalive).to.be.true;
+      expect(fetchRequest.requestHeaders['Content-Type']).to.equal('application/json');
     });
 
     it('onBidderError should not be called if the bid data is null', function () {
       // Call onBidderError with null data
       spec.onBidderError(null);
       // Assert that ajax was not called since bid data is null
-      expect(fetchStub.callCount).to.be.equal(0);
+      expect(server.requests.length).to.be.equal(0);
     });
   });
 
@@ -1131,26 +1114,22 @@ describe('bridgeuppBidAdapter_spec', function () {
       });
 
       // assert statements
-      expect(fetchStub.callCount).to.be.equal(1);
+      expect(server.requests.length).to.be.equal(1);
 
-      const fetchArgs = fetchStub.getCall(0).args;
-      expect(fetchArgs[0]).to.equal(expectedUrl);
-      const actualPayload = fetchArgs[1]?.body;
+      const fetchRequest = server.requests[0];
+      expect(fetchRequest.url).to.equal(expectedUrl);
+      const actualPayload = fetchRequest.requestBody;
       expect(actualPayload).to.equal(expectedPayload);
-      expect(fetchArgs[1]).to.deep.include({
-        method: 'POST',
-        keepalive: true,
-      });
-      expect(fetchArgs[1]?.headers).to.deep.equal({
-        'Content-Type': 'application/json',
-      });
+      expect(fetchRequest.method).to.equal('POST');
+      expect(fetchRequest.fetch.request.keepalive).to.be.true;
+      expect(fetchRequest.requestHeaders['Content-Type']).to.equal('application/json');
     });
 
     it('onBidWon should not be called if the bid data is null', function () {
       // Call onBidWon with null data
       spec.onBidWon(null);
       // Assert that ajax was not called since bid data is null
-      expect(fetchStub.callCount).to.be.equal(0);
+      expect(server.requests.length).to.be.equal(0);
     });
   });
 });
